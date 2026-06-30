@@ -1,0 +1,3493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>宁波智慧文旅 - 三维地图导览</title>
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.104/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+    <script src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; font-family: 'ZCOOL KuaiLe', 'Microsoft YaHei', sans-serif; overflow: hidden; }
+        #cesiumContainer { width: 100%; height: 100%; }
+
+        .header {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.95) 0%, rgba(129, 199, 132, 0.95) 100%);
+            backdrop-filter: blur(12px);
+            padding: 14px 40px;
+            border-radius: 30px;
+            border: 3px solid #fff;
+            color: #fff;
+            text-align: center;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 8px 32px rgba(0, 188, 212, 0.4), inset 0 2px 0 rgba(255,255,255,0.5);
+        }
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: 4px;
+            text-shadow: 2px 2px 4px rgba(0, 77, 64, 0.3);
+        }
+        .header h1 span {
+            color: #006064;
+        }
+        .header p {
+            font-size: 13px;
+            opacity: 0.9;
+            margin-top: 4px;
+            letter-spacing: 2px;
+        }
+
+        .fab {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            background: #fff;
+            border: 3px solid #fff;
+            cursor: pointer;
+            box-shadow: 0 6px 24px rgba(0, 188, 212, 0.5);
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 4px;
+        }
+        .fab img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .fab:hover {
+            transform: scale(1.1) rotate(10deg);
+            box-shadow: 0 8px 32px rgba(0, 188, 212, 0.6);
+        }
+        .fab.hidden { display: none; }
+
+        .chat-panel {
+            position: absolute;
+            bottom: 110px;
+            right: 30px;
+            width: 420px;
+            max-height: 600px;
+            z-index: 1000;
+            background: linear-gradient(135deg, rgba(224, 247, 250, 0.98) 0%, rgba(232, 245, 233, 0.98) 100%);
+            backdrop-filter: blur(16px);
+            border-radius: 24px;
+            border: 3px solid #fff;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 16px 48px rgba(0, 188, 212, 0.3);
+            resize: both;
+            min-width: 320px;
+            min-height: 300px;
+            cursor: move;
+            user-select: none;
+        }
+        .chat-panel.dragging {
+            opacity: 0.9;
+            box-shadow: 0 20px 60px rgba(0, 188, 212, 0.4);
+        }
+        .chat-panel.show { display: flex; }
+        .chat-panel .chat-header {
+            padding: 14px 18px;
+            border-bottom: 2px solid #00bcd4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.3), rgba(129, 199, 132, 0.3));
+            gap: 10px;
+        }
+        .chat-panel .chat-header .header-left {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+        }
+        .chat-panel .chat-header .elf-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 188, 212, 0.3);
+        }
+        .chat-panel .chat-header .elf-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .chat-panel .chat-header h4 {
+            color: #006064;
+            font-size: 16px;
+            margin: 0;
+            letter-spacing: 2px;
+        }
+        .chat-panel .chat-header .close-btn {
+            background: none; border: none; color: #006064;
+            font-size: 22px; cursor: pointer; padding: 0 4px;
+        }
+        .chat-panel .chat-header .close-btn:hover { color: #004d40; }
+        .chat-panel .chat-messages {
+            flex: 1; padding: 12px 16px; overflow-y: auto;
+            max-height: 420px; min-height: 120px;
+            display: flex; flex-direction: column; gap: 10px;
+            scrollbar-width: thin;
+            scrollbar-color: #00bcd4 transparent;
+        }
+        .chat-panel .chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+        .chat-panel .chat-messages::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #00bcd4, #66bb6a);
+            border-radius: 3px;
+        }
+        .chat-panel .chat-messages .msg {
+            padding: 12px 16px; border-radius: 16px; max-width: 80%;
+            font-size: 14px; line-height: 1.6; word-break: break-word;
+        }
+        .chat-panel .chat-messages .msg-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+            align-items: flex-end;
+        }
+        .chat-panel .chat-messages .msg-row.user {
+            justify-content: flex-end;
+        }
+        .chat-panel .chat-messages .msg-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
+            box-shadow: 0 2px 6px rgba(0, 188, 212, 0.3);
+        }
+        .chat-panel .chat-messages .msg-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .chat-panel .chat-messages .msg.user {
+            background: linear-gradient(135deg, #00bcd4, #4dd0e1);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .chat-panel .chat-messages .msg.ai {
+            background: linear-gradient(135deg, #e0f7fa, #e8f5e9);
+            color: #1b5e20;
+            border-bottom-left-radius: 4px;
+        }
+        .chat-panel .chat-messages .msg.error {
+            background: rgba(255, 107, 107, 0.2);
+            color: #DC143C;
+            align-self: flex-start;
+            border-left: 3px solid #DC143C;
+        }
+        .chat-panel .chat-input-area {
+            display: flex; padding: 10px 14px 14px; gap: 8px;
+            border-top: 2px solid #00bcd4;
+            flex-shrink: 0;
+            background: rgba(224, 247, 250, 0.5);
+        }
+        .chat-panel .chat-input-area input {
+            flex: 1; padding: 10px 16px;
+            border: 2px solid #00bcd4;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.8);
+            color: #1b5e20;
+            font-size: 14px;
+            outline: none;
+        }
+        .chat-panel .chat-input-area input::placeholder { color: rgba(27, 94, 32, 0.4); }
+        .chat-panel .chat-input-area input:focus {
+            border-color: #66bb6a;
+            box-shadow: 0 0 10px rgba(102, 187, 106, 0.4);
+        }
+        .chat-panel .chat-input-area button {
+            padding: 10px 20px;
+            border: 2px solid #fff;
+            border-radius: 24px;
+            background: linear-gradient(135deg, #00bcd4, #66bb6a);
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.3s;
+        }
+        .chat-panel .chat-input-area button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(0, 188, 212, 0.5);
+        }
+
+        .sidebar {
+            position: absolute;
+            top: 100px;
+            left: 20px;
+            width: 280px;
+            max-height: calc(100vh - 140px);
+            z-index: 100;
+            background: linear-gradient(135deg, rgba(224, 247, 250, 0.98) 0%, rgba(232, 245, 233, 0.98) 100%);
+            backdrop-filter: blur(16px);
+            border-radius: 20px;
+            border: 3px solid #fff;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 188, 212, 0.3);
+            transition: width 0.3s, max-height 0.3s;
+            cursor: move;
+            user-select: none;
+        }
+        .sidebar.collapsed {
+            width: 50px;
+            max-height: 50px;
+        }
+        .sidebar.collapsed .sidebar-list {
+            height: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        .sidebar.collapsed .sidebar-header {
+            padding: 14px 16px;
+            border-bottom: none;
+        }
+        .sidebar.collapsed .sidebar-header .title-text,
+        .sidebar.collapsed .sidebar-header .attraction-count {
+            display: none;
+        }
+        .sidebar-header {
+            padding: 14px 16px;
+            border-bottom: 2px solid #00bcd4;
+            color: #006064;
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: move;
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.3), rgba(129, 199, 132, 0.3));
+        }
+        .sidebar-header span { font-size: 18px; }
+        .sidebar-header .title-text { flex: 1; }
+        .sidebar-header .attraction-count { font-size:12px; opacity:0.7; color: #006064; }
+        .sidebar-header .collapse-btn {
+            cursor: pointer;
+            transition: transform 0.3s;
+            font-size: 16px;
+            color: #006064;
+        }
+        .sidebar.collapsed .sidebar-header .collapse-btn {
+            transform: rotate(180deg);
+        }
+        .sidebar.dragging {
+            opacity: 0.8;
+            cursor: grabbing;
+            box-shadow: 0 12px 48px rgba(0, 188, 212, 0.5);
+        }
+        .sidebar-list {
+            padding: 8px;
+            overflow-y: auto;
+            max-height: calc(100vh - 180px);
+            scrollbar-width: thin;
+            scrollbar-color: #00bcd4 transparent;
+        }
+        .sidebar-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar-list::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #00bcd4, #66bb6a);
+            border-radius: 3px;
+        }
+        .sidebar-item {
+            padding: 10px 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            margin-bottom: 4px;
+            transition: all 0.2s;
+            color: #1b5e20;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .sidebar-item:hover {
+            background: rgba(0, 188, 212, 0.3);
+            transform: translateX(4px);
+        }
+        .sidebar-item.active {
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.5), rgba(129, 199, 132, 0.5));
+            color: #fff;
+            border-left: 3px solid #00bcd4;
+        }
+        .sidebar-item .icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, #00bcd4, #66bb6a);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 188, 212, 0.4);
+            padding: 5px;
+        }
+        .sidebar-item .icon svg {
+            width: 100%;
+            height: 100%;
+            stroke: #fff;
+        }
+        .sidebar-item .info { flex: 1; }
+        .sidebar-item .info .name { font-weight: 500; margin-bottom: 2px; }
+        .sidebar-item .info .desc { font-size: 11px; opacity: 0.6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .tooltip {
+            position: absolute;
+            pointer-events: none;
+            z-index: 2000;
+            background: linear-gradient(135deg, rgba(224, 247, 250, 0.98) 0%, rgba(232, 245, 233, 0.98) 100%);
+            backdrop-filter: blur(12px);
+            padding: 12px 16px;
+            border-radius: 16px;
+            border: 2px solid #fff;
+            box-shadow: 0 8px 32px rgba(0, 188, 212, 0.4);
+            color: #1b5e20;
+            font-size: 14px;
+            white-space: nowrap;
+            display: none;
+            max-width: 350px;
+        }
+        .tooltip.show { display: block; }
+        .tooltip h4 { margin: 0 0 6px 0; color: #006064; font-size: 16px; }
+        .tooltip p { margin: 0; font-size: 13px; opacity: 0.8; line-height: 1.5; white-space: normal; }
+
+        .mode-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            gap: 6px;
+        }
+        .mode-btn {
+            padding: 8px 16px;
+            border: 2px solid #fff;
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.8), rgba(129, 199, 132, 0.8));
+            backdrop-filter: blur(8px);
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(0, 188, 212, 0.3);
+        }
+        .mode-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 16px rgba(0, 188, 212, 0.5);
+        }
+        .mode-btn.active {
+            background: linear-gradient(135deg, #00bcd4, #66bb6a);
+            color: #fff;
+            box-shadow: 0 6px 20px rgba(0, 188, 212, 0.6);
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, rgba(224, 247, 250, 0.98) 0%, rgba(232, 245, 233, 0.98) 100%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #006064;
+        }
+        .loading-spinner {
+            width: 50px; height: 50px;
+            border: 4px solid rgba(0, 188, 212, 0.3);
+            border-top-color: #00bcd4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 16px;
+            box-shadow: 0 0 20px rgba(0, 188, 212, 0.4);
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-text { font-size: 14px; opacity: 0.8; color: #006064; letter-spacing: 2px; }
+
+        .icon-svg {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            vertical-align: middle;
+        }
+        .icon-svg svg {
+            width: 1em;
+            height: 1em;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .custom-infobox {
+            position: absolute;
+            top: 100px;
+            right: 20px;
+            width: 400px;
+            max-height: 550px;
+            background: linear-gradient(135deg, rgba(224, 247, 250, 0.98) 0%, rgba(232, 245, 233, 0.98) 100%);
+            backdrop-filter: blur(16px);
+            border-radius: 24px;
+            border: 3px solid #fff;
+            padding: 20px;
+            color: #1b5e20;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 16px 48px rgba(0, 188, 212, 0.3);
+            overflow-y: auto;
+            resize: both;
+            min-width: 300px;
+            min-height: 200px;
+            max-width: 550px;
+            cursor: move;
+            user-select: none;
+        }
+        .custom-infobox.dragging {
+            opacity: 0.9;
+            box-shadow: 0 20px 60px rgba(0, 188, 212, 0.4);
+        }
+        .custom-infobox.show { display: block; }
+        .custom-infobox .close-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: none;
+            border: none;
+            color: #006064;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 4px;
+        }
+        .custom-infobox .close-btn:hover { color: #004d40; }
+        .custom-infobox img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            border: 3px solid #fff;
+            box-shadow: 0 4px 16px rgba(0, 188, 212, 0.3);
+        }
+        .custom-infobox h3 {
+            color: #006064;
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: 1px;
+        }
+        .custom-infobox .infobox-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .custom-infobox .infobox-rating {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 200, 0, 0.15);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+        }
+        .custom-infobox .infobox-rating .star { color: #ffc107; }
+        .custom-infobox .infobox-rating span:last-child { color: #006064; font-weight: 600; }
+        .custom-infobox .infobox-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+        .custom-infobox .infobox-tags .tag {
+            background: rgba(0, 188, 212, 0.15);
+            color: #006064;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            border: 1px solid rgba(0, 188, 212, 0.3);
+        }
+        .custom-infobox p {
+            color: #1b5e20;
+            font-size: 14px;
+            line-height: 1.7;
+            margin: 0 0 16px 0;
+        }
+        .custom-infobox .infobox-details {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 12px;
+            flex-wrap: wrap;
+        }
+        .custom-infobox .detail-item {
+            flex: 1;
+            min-width: calc(50% - 12px);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .custom-infobox .detail-icon { font-size: 16px; }
+        .custom-infobox .detail-label { font-size: 11px; opacity: 0.6; }
+        .custom-infobox .detail-value { font-size: 13px; color: #006064; font-weight: 600; }
+        .custom-infobox .infobox-section {
+            margin-bottom: 16px;
+        }
+        .custom-infobox .infobox-section h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #006064;
+        }
+        .custom-infobox .infobox-section ul {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .custom-infobox .infobox-section li {
+            font-size: 13px;
+            color: #1b5e20;
+            margin-bottom: 4px;
+            line-height: 1.6;
+        }
+        .custom-infobox .infobox-food {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .custom-infobox .infobox-food .food-item {
+            background: rgba(102, 187, 106, 0.15);
+            color: #1b5e20;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            border: 1px solid rgba(102, 187, 106, 0.3);
+        }
+        .custom-infobox .story-text {
+            color: #1b5e20;
+            font-size: 13px;
+            line-height: 1.7;
+            margin: 0;
+            padding: 10px 12px;
+            background: rgba(224, 247, 250, 0.5);
+            border-radius: 10px;
+            border-left: 3px solid #00bcd4;
+        }
+        .custom-infobox .infobox-nearby {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .custom-infobox .nearby-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .custom-infobox .nearby-item:hover {
+            background: rgba(0, 188, 212, 0.1);
+            border-color: rgba(0, 188, 212, 0.3);
+        }
+        .custom-infobox .nearby-item .nearby-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #00bcd4;
+            flex-shrink: 0;
+        }
+        .custom-infobox .nearby-item .nearby-name {
+            flex: 1;
+            font-size: 13px;
+            color: #006064;
+            font-weight: 500;
+        }
+        .custom-infobox .nearby-item .nearby-dist {
+            font-size: 11px;
+            color: #66bb6a;
+            white-space: nowrap;
+        }
+        .custom-infobox .infobox-reviews {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .custom-infobox .review-item {
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 10px;
+        }
+        .custom-infobox .review-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .custom-infobox .review-avatar {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00bcd4, #66bb6a);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .custom-infobox .review-name {
+            font-size: 12px;
+            color: #006064;
+            font-weight: 600;
+        }
+        .custom-infobox .review-stars {
+            margin-left: auto;
+            color: #ffc107;
+            font-size: 12px;
+        }
+        .custom-infobox .review-text {
+            font-size: 13px;
+            color: #1b5e20;
+            line-height: 1.6;
+        }
+        .custom-infobox .infobox-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 2px solid #00bcd4;
+            flex-wrap: wrap;
+        }
+        .custom-infobox .action-btn {
+            flex: 1;
+            min-width: calc(50% - 8px);
+            padding: 8px 12px;
+            border: 2px solid #fff;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #00bcd4, #66bb6a);
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            box-shadow: 0 4px 12px rgba(0, 188, 212, 0.3);
+        }
+        .custom-infobox .action-btn:hover {
+            transform: scale(1.03);
+            box-shadow: 0 6px 16px rgba(0, 188, 212, 0.5);
+        }
+
+        .weather-panel {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            z-index: 100;
+            background: linear-gradient(135deg, rgba(224, 247, 250, 0.98) 0%, rgba(232, 245, 233, 0.98) 100%);
+            backdrop-filter: blur(12px);
+            padding: 14px 18px;
+            border-radius: 20px;
+            border: 2px solid #fff;
+            color: #1b5e20;
+            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 8px 24px rgba(0, 188, 212, 0.3);
+            cursor: default;
+            min-width: 200px;
+        }
+        .weather-panel .weather-main {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .weather-panel .weather-icon { font-size: 28px; cursor: pointer; transition: transform 0.2s; }
+        .weather-panel .weather-icon:hover { transform: scale(1.15); }
+        .weather-panel .weather-info { display: flex; flex-direction: column; }
+        .weather-panel .weather-temp { font-size: 20px; font-weight: 600; color: #006064; }
+        .weather-panel .weather-desc { font-size: 12px; opacity: 0.7; }
+        .weather-panel .weather-forecast {
+            display: flex;
+            gap: 8px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0, 188, 212, 0.2);
+        }
+        .weather-panel .forecast-item {
+            flex: 1;
+            text-align: center;
+            padding: 4px 0;
+            border-radius: 10px;
+            background: rgba(0, 188, 212, 0.08);
+        }
+        .weather-panel .forecast-item .forecast-day { font-size: 10px; opacity: 0.6; }
+        .weather-panel .forecast-item .forecast-icon { font-size: 16px; margin: 2px 0; }
+        .weather-panel .forecast-item .forecast-temp { font-size: 11px; color: #006064; font-weight: 600; }
+        .weather-panel .scene-switcher {
+            display: flex;
+            gap: 6px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(0, 188, 212, 0.2);
+        }
+        .weather-panel .scene-btn {
+            flex: 1;
+            padding: 4px 0;
+            border: 1.5px solid rgba(0, 188, 212, 0.3);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.5);
+            color: #006064;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .weather-panel .scene-btn:hover { background: rgba(0, 188, 212, 0.15); border-color: #00bcd4; }
+        .weather-panel .scene-btn.active { background: rgba(0, 188, 212, 0.25); border-color: #00bcd4; font-weight: 600; }
+        .weather-rain { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
+        .weather-snow { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
+        .weather-fog { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; background: rgba(200,220,220,0.3); }
+
+        .route-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 100;
+            background: linear-gradient(135deg, rgba(224, 247, 250, 0.98) 0%, rgba(232, 245, 233, 0.98) 100%);
+            backdrop-filter: blur(12px);
+            padding: 14px 18px;
+            border-radius: 20px;
+            border: 3px solid #fff;
+            color: #1b5e20;
+            font-size: 13px;
+            box-shadow: 0 8px 24px rgba(0, 188, 212, 0.3);
+            display: none;
+            cursor: move;
+            user-select: none;
+        }
+        .route-panel.dragging {
+            opacity: 0.8;
+            cursor: grabbing;
+            box-shadow: 0 12px 48px rgba(0, 188, 212, 0.5);
+        }
+        .route-panel.show { display: block; }
+        .route-panel .route-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #00bcd4;
+            padding-bottom: 8px;
+        }
+        .route-panel .route-header h4 { margin: 0; font-size: 15px; color: #006064; letter-spacing: 1px; }
+        .route-panel .route-header .close-btn {
+            background: none;
+            border: none;
+            color: #006064;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .route-panel .route-header .close-btn:hover { color: #004d40; }
+        .route-panel .route-steps { list-style: none; padding: 0; margin: 0; }
+        .route-panel .route-step {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0, 188, 212, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .route-panel .route-step:last-child { border-bottom: none; }
+        .route-panel .route-step .step-num {
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, #00bcd4, #66bb6a);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 600;
+            flex-shrink: 0;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0, 188, 212, 0.4);
+        }
+        .route-panel .route-step .step-info { flex: 1; }
+        .route-panel .route-step .step-name { font-weight: 500; font-size: 13px; color: #1b5e20; }
+        .route-panel .route-step .step-dist { font-size: 11px; opacity: 0.6; color: #006064; }
+
+        .attraction-label {
+            font-family: 'ZCOOL KuaiLe', 'Microsoft YaHei', sans-serif;
+            font-size: 14px;
+            font-weight: bold;
+            color: #006064;
+            background: linear-gradient(135deg, rgba(224, 247, 250, 0.98), rgba(232, 245, 233, 0.98));
+            padding: 4px 12px;
+            border-radius: 16px;
+            border: 2px solid #fff;
+            white-space: nowrap;
+            box-shadow: 0 4px 16px rgba(0, 188, 212, 0.4);
+            pointer-events: none;
+        }
+
+        .panorama-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: rgba(0, 48, 48, 0.95);
+            display: none;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+        .panorama-overlay.show {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: flex-start;
+        }
+        .panorama-overlay.visible { opacity: 1; }
+        #panoramaViewer {
+            flex: 1;
+            width: 100%;
+            min-height: 0;
+            position: relative;
+        }
+        .panorama-header {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.95) 0%, rgba(129, 199, 132, 0.95) 100%);
+            backdrop-filter: blur(16px);
+            padding: 12px 32px;
+            border-radius: 30px;
+            border: 3px solid #fff;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 8px 32px rgba(0, 188, 212, 0.5);
+            white-space: nowrap;
+        }
+        .panorama-header h3 {
+            margin: 0;
+            font-size: 20px;
+            letter-spacing: 2px;
+            text-shadow: 1px 1px 2px rgba(0, 77, 64, 0.3);
+        }
+        .panorama-header .close-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid #fff;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        .panorama-header .close-btn:hover {
+            background: rgba(255, 255, 255, 0.4);
+            transform: scale(1.1);
+        }
+        .panorama-loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            gap: 16px;
+            z-index: 5002;
+        }
+        .panorama-loading .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #00bcd4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            box-shadow: 0 0 20px rgba(0, 188, 212, 0.4);
+        }
+        .panorama-loading .loading-text {
+            font-size: 16px;
+            letter-spacing: 2px;
+            opacity: 0.8;
+        }
+        .panorama-hint {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5001;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(8px);
+            padding: 8px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+            letter-spacing: 1px;
+            pointer-events: none;
+            transition: opacity 2s ease;
+        }
+        .pnlm-about-msg, .pnlm-orientation-button { display: none !important; }
+        .pnlm-container { background: transparent !important; }
+
+        @media (max-width: 768px) {
+            .sidebar { width: 220px; left: 10px; }
+            .chat-panel { width: 92%; right: 4%; bottom: 80px; max-height: 55vh; }
+            .custom-infobox { width: 92%; right: 4%; top: 80px; max-height: 50vh; }
+            .header h1 { font-size: 18px; }
+            .header p { font-size: 11px; }
+            .header { padding: 8px 20px; top: 10px; }
+            .fab { width: 50px; height: 50px; font-size: 24px; bottom: 20px; right: 20px; }
+            .mode-toggle { top: 80px; right: 10px; }
+            .mode-btn { padding: 6px 12px; font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在加载三维地图资源...</div>
+    </div>
+
+    <div id="cesiumContainer"></div>
+    
+    <div class="header">
+        <h1><span class="icon-svg"><svg viewBox="0 0 24 24"><path d="M2 20h20"/><path d="M3 20V10l9-6 9 6v10"/><path d="M6 20v-6h12v6"/><path d="M9 20v-4h6v4"/><path d="M12 4V2"/></svg></span> 宁波<span>智慧文旅</span></h1>
+        <p>滚轮缩放 · 点击标记 · AI 导游</p>
+    </div>
+
+    <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="3d"><span class="icon-svg"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span> 3D</button>
+        <button class="mode-btn" data-mode="columbus"><span class="icon-svg"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><path d="M3 12h18"/><path d="M3 7l18 10"/><path d="M3 17L21 7"/></svg></span> 2.5D</button>
+        <button class="mode-btn" data-mode="2d"><span class="icon-svg"><svg viewBox="0 0 24 24"><path d="M9 14 5 17V3l4 3"/><path d="m15 14 4 3V3l-4 3"/><path d="M9 17v4"/><path d="M15 17v4"/></svg></span> 2D</button>
+    </div>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <span class="icon-svg"><svg viewBox="0 0 24 24"><path d="M20 10c0 7-8 13-8 13s-8-6-8-13a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
+            <span class="title-text">景点列表</span>
+            <span class="attraction-count" id="attractionCount">25个</span>
+            <span class="collapse-btn" id="sidebarCollapseBtn">◀</span>
+        </div>
+        <div class="sidebar-list" id="sidebarList"></div>
+    </div>
+
+    <div class="tooltip" id="tooltip">
+        <h4 id="tooltipName">景点名称</h4>
+        <p id="tooltipDesc">景点介绍</p>
+    </div>
+
+    <div class="custom-infobox" id="customInfobox">
+        <button class="close-btn" id="infoboxClose">✕</button>
+        <img id="infoboxImage" src="" alt="景点图片" />
+        <div class="infobox-header">
+            <h3 id="infoboxTitle">景点名称</h3>
+            <div class="infobox-rating" id="infoboxRating">
+                <span class="star">★</span><span id="ratingValue">4.8</span>
+            </div>
+        </div>
+        <div class="infobox-tags" id="infoboxTags"></div>
+        <p id="infoboxDesc">景点介绍</p>
+        <div class="infobox-details">
+            <div class="detail-item">
+                <span class="detail-icon">🕐</span>
+                <span class="detail-label">开放时间</span>
+                <span class="detail-value" id="infoboxHours">--</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-icon">🎫</span>
+                <span class="detail-label">门票价格</span>
+                <span class="detail-value" id="infoboxPrice">--</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-icon">🌸</span>
+                <span class="detail-label">最佳时节</span>
+                <span class="detail-value" id="infoboxBestTime">--</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-icon">⏱</span>
+                <span class="detail-label">建议时长</span>
+                <span class="detail-value" id="infoboxDuration">--</span>
+            </div>
+        </div>
+        <div class="infobox-section">
+            <h4>📖 趣闻轶事</h4>
+            <p id="infoboxStory" class="story-text">--</p>
+        </div>
+        <div class="infobox-section">
+            <h4>💡 趣味知识</h4>
+            <ul id="infoboxFacts"></ul>
+        </div>
+        <div class="infobox-section">
+            <h4>🍜 附近美食</h4>
+            <div class="infobox-food" id="infoboxFood"></div>
+        </div>
+        <div class="infobox-section">
+            <h4>📍 附近景点</h4>
+            <div class="infobox-nearby" id="infoboxNearby"></div>
+        </div>
+        <div class="infobox-section">
+            <h4>💬 游客评价</h4>
+            <div class="infobox-reviews" id="infoboxReviews"></div>
+        </div>
+        <div class="infobox-actions">
+            <button class="action-btn" id="actionRoute"><span class="icon-svg"><svg viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></span> 路线规划</button>
+            <button class="action-btn" id="actionPanorama"><span class="icon-svg"><svg viewBox="0 0 24 24"><path d="M21 9V3h-6"/><path d="M21 3l-9 9"/><path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M3 16l5-5 4 4 4-4 5 5"/></svg></span> 全景浏览</button>
+            <button class="action-btn" id="actionGuide"><span class="icon-svg"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></span> 精灵讲解</button>
+        </div>
+    </div>
+
+    <div class="weather-panel" id="weatherPanel">
+        <div class="weather-main">
+            <div class="weather-icon icon-svg" id="weatherIcon" style="font-size:28px;"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></div>
+            <div class="weather-info">
+                <div class="weather-temp" id="weatherTemp">--°C</div>
+                <div class="weather-desc" id="weatherDesc">宁波 · 加载中</div>
+            </div>
+        </div>
+        <div class="weather-forecast" id="weatherForecast">
+            <div class="forecast-item"><div class="forecast-day">明天</div><div class="forecast-icon" id="fc1">--</div><div class="forecast-temp" id="ft1">--</div></div>
+            <div class="forecast-item"><div class="forecast-day">后天</div><div class="forecast-icon" id="fc2">--</div><div class="forecast-temp" id="ft2">--</div></div>
+            <div class="forecast-item"><div class="forecast-day">大后天</div><div class="forecast-icon" id="fc3">--</div><div class="forecast-temp" id="ft3">--</div></div>
+        </div>
+        <div class="scene-switcher" id="sceneSwitcher">
+            <button class="scene-btn active" data-scene="clear">晴天</button>
+            <button class="scene-btn" data-scene="rain">雨天</button>
+            <button class="scene-btn" data-scene="snow">雪天</button>
+            <button class="scene-btn" data-scene="fog">雾天</button>
+        </div>
+    </div>
+
+    <div class="route-panel" id="routePanel">
+        <div class="route-header">
+            <h4><span class="icon-svg"><svg viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></span> 推荐路线</h4>
+            <button class="close-btn" id="routeClose">✕</button>
+        </div>
+        <ul class="route-steps" id="routeSteps">
+        </ul>
+    </div>
+
+    <div class="panorama-overlay" id="panoramaOverlay">
+        <div class="panorama-header">
+            <h3 id="panoramaTitle">景点全景</h3>
+            <button class="close-btn" id="panoramaClose">✕</button>
+        </div>
+        <div class="panorama-loading" id="panoramaLoading">
+            <div class="spinner"></div>
+            <div class="loading-text">正在生成全景图像...</div>
+        </div>
+        <div id="panoramaViewer"></div>
+        <div class="panorama-hint" id="panoramaHint">拖拽旋转 · 滚轮缩放 · ESC 退出</div>
+    </div>
+
+    <button class="fab" id="fab"><img src="images/elf-guide.png" alt="小精灵导游" /></button>
+
+    <div class="chat-panel" id="chatPanel">
+        <div class="chat-header">
+            <div class="header-left">
+                <div class="elf-avatar"><img src="images/elf-guide.png" alt="小精灵导游" /></div>
+                <h4>小精灵导游</h4>
+            </div>
+            <button class="close-btn" id="chatClose">✕</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="msg-row">
+                <div class="msg-avatar"><img src="images/elf-guide.png" alt="小精灵" /></div>
+                <div class="msg ai">你好！我是宁波智慧文旅的小精灵导游～<br>问我关于宁波景点、美食、历史的问题吧！</div>
+            </div>
+        </div>
+        <div class="chat-input-area">
+            <input id="chatInput" placeholder="例如：天一阁有什么好玩的？" />
+            <button id="chatSend">发送</button>
+        </div>
+    </div>
+
+    <script>
+        async function initApp() {
+            const viewer = new Cesium.Viewer('cesiumContainer', {
+                terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+                animation: false,
+                baseLayer: false,
+                baseLayerPicker: false,
+                fullscreenButton: false,
+                geocoder: false,
+                homeButton: false,
+                sceneModePicker: false,
+                timeline: false,
+                navigationHelpButton: false,
+                selectionIndicator: false,
+                infoBox: false
+            });
+
+            viewer.scene.screenSpaceCameraController.enableZoom = true;
+            viewer.scene.screenSpaceCameraController.enablePan = true;
+            viewer.scene.screenSpaceCameraController.enableRotate = true;
+            viewer.scene.screenSpaceCameraController.enableTilt = true;
+
+            document.addEventListener('wheel', function(e) {
+                if (e.target === viewer.scene.canvas || viewer.scene.canvas.contains(e.target)) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            try {
+                const osmImagery = new Cesium.OpenStreetMapImageryProvider({
+                    url: 'https://tile.openstreetmap.org/'
+                });
+                viewer.imageryLayers.addImageryProvider(osmImagery);
+            } catch (e) {
+                console.warn('OpenStreetMap加载失败:', e);
+            }
+
+            try {
+                const arcgisImagery = new Cesium.ArcGisMapServerImageryProvider({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'
+                });
+                viewer.imageryLayers.addImageryProvider(arcgisImagery);
+            } catch (e) {
+                console.warn('ArcGIS影像加载失败:', e);
+            }
+
+            viewer.camera.flyTo({
+                destination: Cesium.Cartesian3.fromDegrees(121.55, 29.87, 50000),
+                orientation: { heading: Cesium.Math.toRadians(0), pitch: Cesium.Math.toRadians(-45), roll: 0 },
+                duration: 3
+            });
+
+            try {
+                const buildingsTileset = await Cesium.createOsmBuildingsAsync();
+                viewer.scene.primitives.add(buildingsTileset);
+            } catch (e) {
+                console.warn('3D建筑加载失败:', e);
+            }
+
+            const iconLibrary = {
+                book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>',
+                wave: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></svg>',
+                city: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="6" height="14" rx="1"/><rect x="10" y="4" width="6" height="18" rx="1"/><rect x="18" y="10" width="4" height="12" rx="1"/><path d="M4 12h2"/><path d="M4 16h2"/><path d="M12 8h2"/><path d="M12 12h2"/><path d="M12 16h2"/><path d="M19 14h2"/></svg>',
+                temple: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M3 20V10l9-6 9 6v10"/><path d="M6 20v-6h12v6"/><path d="M9 20v-4h6v4"/><path d="M12 4V2"/></svg>',
+                lake: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M3 14c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M12 4v6"/><path d="M8 8l4-4 4 4"/></svg>',
+                tower: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 22h4"/><path d="M12 22V10"/><path d="M8 10h8l-1-4H9L8 10z"/><path d="M9 6h6L12 2 9 6z"/></svg>',
+                mountain: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m8 3 4 8 5-5 5 15H2L8 3z"/><path d="m4.14 15.08 4.14-4.15 2 2.07"/></svg>',
+                town: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20v-8l4-3 4 3v8"/><path d="M10 20v-6l4-2 4 2v6"/><path d="M2 20h20"/><path d="M4 15h2"/><path d="M14 15h2"/><path d="M14 18h2"/></svg>',
+                film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><path d="M7 2v20"/><path d="M17 2v20"/><path d="M2 12h20"/><path d="M2 7h5"/><path d="M2 17h5"/><path d="M17 17h5"/><path d="M17 7h5"/></svg>',
+                beach: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><circle cx="17" cy="7" r="3"/><path d="M10.6 9.5a3 3 0 1 1 4.9 3.3"/></svg>',
+                heart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
+                building: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="1"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></svg>',
+                sail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 21c0-1.7 1.3-3 3-3h14c1.7 0 3 1.3 3 3"/><path d="M12 21V3"/><path d="M12 3c5 1.5 5 7 0 9"/><path d="M12 12c-4 1.5-5 6-5 9h5"/></svg>',
+                shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>',
+                shop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9v11h18V9"/><path d="M3 9h18"/><path d="M9 20v-6h6v6"/><path d="M8 9V7"/><path d="M16 9V7"/></svg>',
+                bird: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7h.01"/><path d="M3.4 18H12a8 8 0 0 0 8-8V7a4 4 0 0 0-7.28-2.3L2 20"/><path d="m20 7 2 .5-2 .5"/><path d="M10 18v3"/><path d="M14 17v4"/><path d="M8 18v3"/></svg>',
+                island: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path d="M2 17c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><ellipse cx="12" cy="10" rx="7" ry="4"/><path d="M10 10V7l2-2 2 2v3"/></svg>',
+                location: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 7-8 13-8 13s-8-6-8-13a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>',
+                globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>',
+                perspective: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M3 12h18"/><path d="M3 7l18 10"/><path d="M3 17L21 7"/></svg>',
+                map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 5 17V3l4 3"/><path d="m15 14 4 3V3l-4 3"/><path d="M9 17v4"/><path d="M15 17v4"/></svg>',
+                route: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg>',
+                sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>'
+            };
+
+            const attractions = [
+                { 
+                    name: '天一阁',
+                    lon: 121.5342,
+                    lat: 29.8751,
+                    desc: '中国现存最早的私家藏书楼，始建于明嘉靖四十年（1561年），由兵部右侍郎范钦主持建造。藏书七万余卷，以地方志、登科录等史料价值极高的文献著称。天一阁是宁波文化的象征，也是全国重点文物保护单位。', 
+                    icon: 'book',
+                    image: 'images/tianyi-ge-panorama.png',
+                    openingHours: '8:30-17:30',
+                    ticketPrice: '30元',
+                    rating: 4.8,
+                    tags: ['历史', '文化', '藏书', '古迹'],
+                    funFacts: ['中国最早的私家藏书楼', '范钦建造', '藏书七万余卷', '天一阁名字取自《易经》'],
+                    nearbyFood: ['缸鸭狗汤圆', '宁波年糕', '油赞子'],
+                    funStories: '相传范钦建天一阁时，曾请人算卦，得"天一生水，地六成之"，故以"天一"命名，取以水克火之意保护藏书。',
+                    bestTime: '春季3-5月',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'书虫小明',stars:5,text:'藏书文化太震撼了，感受到古人的智慧！'},{user:'旅行的鱼',stars:4,text:'园林很美，但游客较多建议早去。'},{user:'历史迷',stars:5,text:'每次来都能发现新的细节，值得反复参观。'}],
+                    panoramaImage: 'images/tianyi-ge-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ningbo Tianyi Ge ancient Chinese private library courtyard traditional architecture wooden building garden pond scenic immersive wide angle equirectangular'
+                },
+                { 
+                    name: '月湖',
+                    lon: 121.5445,
+                    lat: 29.8695,
+                    desc: '宁波城市中心的风景湖泊，开凿于唐代，是宁波的母亲湖。湖畔遍布亭台楼阁、祠堂书院，是宁波文化的发源地之一。月湖十景闻名遐迩，是市民休闲的好去处。', 
+                    icon: 'lake',
+                    image: 'images/yuehu-panorama.png',
+                    openingHours: '全天开放',
+                    ticketPrice: '免费',
+                    rating: 4.6,
+                    tags: ['自然', '湖泊', '公园', '休闲'],
+                    funFacts: ['开凿于唐代', '宁波母亲湖', '月湖十景', '文人墨客聚集地'],
+                    nearbyFood: ['南塘油赞子', '宁波汤圆', '糖炒栗子'],
+                    funStories: '月湖曾是宁波文人墨客的聚集地，王安石任鄞县令时常在湖畔吟诗作赋，留下了许多脍炙人口的诗篇。',
+                    bestTime: '四季皆宜',
+                    suggestedDuration: '1-2小时',
+                    reviews: [{user:'慢生活',stars:5,text:'城市中心的宁静之地，散步很惬意。'},{user:'摄影达人',stars:4,text:'傍晚拍照特别美，推荐日落时分来。'},{user:'亲子游',stars:4,text:'带孩子来喂鸽子看荷花，很开心。'}],
+                    panoramaImage: 'images/yuehu-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ningbo Yuehu Lake scenic lake traditional pavilion willow trees boats reflection garden city park immersive wide angle equirectangular'
+                },
+                { 
+                    name: '老外滩',
+                    lon: 121.5682, 
+                    lat: 29.8852, 
+                    desc: '宁波的夜生活与历史文化街区，是中国最早的外滩之一。保留了大量欧式建筑，如今成为集餐饮、娱乐、购物于一体的时尚街区。夜晚灯光璀璨，是宁波最美的夜景地之一。', 
+                    icon: 'city',
+                    image: 'images/waitan-panorama.png',
+                    openingHours: '全天开放',
+                    ticketPrice: '免费',
+                    rating: 4.7,
+                    tags: ['夜景', '美食', '购物', '欧式建筑'],
+                    funFacts: ['中国最早的外滩', '保留大量欧式建筑', '宁波夜景地标', '百年历史街区'],
+                    nearbyFood: ['宁波海鲜', '西餐', '烧烤', '特色小吃'],
+                    funStories: '宁波老外滩比上海外滩还早20年开埠，是中国最早的"外滩"。这里曾是各国洋行林立的通商口岸，见证了宁波近代的繁华。',
+                    bestTime: '夏秋6-10月',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'夜猫子',stars:5,text:'夜景太美了！酒吧街氛围超好。'},{user:'建筑控',stars:5,text:'欧式建筑保存得很好，拍照超出片。'},{user:'吃货王',stars:4,text:'美食选择很多，就是停车不太方便。'}],
+                    panoramaImage: 'images/waitan-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ningbo Old Bund night scene european style buildings lights river bars restaurants waterfront immersive wide angle equirectangular'
+                },
+                { 
+                    name: '慈城古县城', 
+                    lon: 121.4428, 
+                    lat: 29.9842, 
+                    desc: '江南保存最完整的古县城之一，拥有千年历史。保留了县衙、孔庙、城隍庙等大量古建筑，被誉为"江南第一古县城"。城内还有众多传统小吃，是体验江南古镇文化的绝佳去处。', 
+                    icon: 'temple',
+                    image: 'images/cicheng-panorama.png',
+                    openingHours: '9:00-17:00',
+                    ticketPrice: '免费（部分景点收费）',
+                    rating: 4.5,
+                    tags: ['古镇', '历史', '古建筑', '县衙'],
+                    funFacts: ['江南第一古县城', '千年历史', '保留县衙孔庙', '传统小吃聚集地'],
+                    nearbyFood: ['慈城年糕', '油赞子', '酒酿圆子'],
+                    funStories: '慈城被称为"江南第一古县城"，城内保留着完整的县衙格局，据说当年审案的升堂仪式每天都会实景演出，让游客穿越回古代。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '3-4小时',
+                    reviews: [{user:'古风控',stars:5,text:'比其他古镇商业化程度低，更有原汁原味。'},{user:'文化旅者',stars:4,text:'县衙和孔庙很值得看，年糕也好吃！'},{user:'周末游',stars:4,text:'适合周末慢逛，不建议赶时间。'}],
+                    panoramaImage: 'images/cicheng-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Cicheng ancient town Ningbo traditional Chinese city wall old streets Jiangnan style immersive wide angle equirectangular'
+                },
+                { 
+                    name: '东钱湖', 
+                    lon: 121.6438, 
+                    lat: 29.7742, 
+                    desc: '浙江最大的天然淡水湖，面积22平方公里。湖中有十景，周边有陶公岛、小普陀等景点，是宁波重要的旅游度假区。湖光山色，风景秀丽，适合休闲度假和水上运动。', 
+                    icon: 'lake',
+                    image: 'images/dongqian-lake-panorama.png',
+                    openingHours: '全天开放',
+                    ticketPrice: '免费（部分景点收费）',
+                    rating: 4.7,
+                    tags: ['湖泊', '自然', '度假', '水上运动'],
+                    funFacts: ['浙江最大天然淡水湖', '面积22平方公里', '东钱湖十景', '范蠡西施传说'],
+                    nearbyFood: ['钱湖鱼头', '湖鲜', '宁波海鲜'],
+                    funStories: '东钱湖有"西子风韵、太湖气魄"之称，相传范蠡助越灭吴后，携西施隐居于此，故湖中有"陶公岛"之名。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '半天-1天',
+                    reviews: [{user:'骑行侠',stars:5,text:'环湖骑行太爽了！风景一路变换。'},{user:'度假族',stars:4,text:'适合周末度假，民宿选择多。'},{user:'垂钓客',stars:4,text:'钓鱼的好地方，鱼头汤鲜美无比。'}],
+                    panoramaImage: 'images/dongqian-lake-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ningbo Dongqian Lake large freshwater lake islands mountains boats tourism resort immersive wide angle equirectangular'
+                },
+                { 
+                    name: '小普陀', 
+                    lon: 121.6538, 
+                    lat: 29.7642, 
+                    desc: '东钱湖中的著名景点，是湖中的一个小岛，有长堤与岸边相连。岛上有霞屿禅寺等古迹，风景优美，是东钱湖旅游的必去之地。', 
+                    icon: 'temple',
+                    image: 'images/xiao-putuo-panorama.png',
+                    openingHours: '8:30-17:00',
+                    ticketPrice: '30元',
+                    rating: 4.5,
+                    tags: ['岛屿', '寺庙', '古迹', '湖景'],
+                    funFacts: ['湖中岛屿', '长堤相连', '霞屿禅寺', '观音文化'],
+                    nearbyFood: ['湖鲜', '素食', '茶点'],
+                    funStories: '小普陀因湖中霞屿形似普陀山而得名，岛上霞屿禅寺的观音像据说十分灵验，每逢观音诞辰日，香客如织。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '1-2小时',
+                    reviews: [{user:'祈福者',stars:5,text:'禅寺清幽，在湖心岛上很有意境。'},{user:'划船乐',stars:4,text:'坐船到岛上的体验很好。'},{user:'湖景迷',stars:4,text:'从岛上回望湖岸，风景如画。'}],
+                    panoramaImage: 'images/xiao-putuo-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ningbo Little Putuo island temple lake scenery Chinese architecture causeway immersive wide angle equirectangular'
+                },
+                { 
+                    name: '陶公岛', 
+                    lon: 121.6338, 
+                    lat: 29.7842, 
+                    desc: '东钱湖中的岛屿，传说春秋时期范蠡和西施曾在此隐居。岛上有陶公祠、望鱼亭等景点，是东钱湖重要的文化景点。', 
+                    icon: 'island',
+                    image: 'images/taogongdao.png',
+                    openingHours: '8:30-17:00',
+                    ticketPrice: '20元',
+                    rating: 4.4,
+                    tags: ['岛屿', '历史', '传说', '文化'],
+                    funFacts: ['范蠡西施隐居地', '陶公祠', '望鱼亭', '春秋传说'],
+                    nearbyFood: ['湖鲜', '农家菜'],
+                    funStories: '陶公岛因范蠡（陶朱公）传说而得名。相传范蠡辅佐越王勾践灭吴后，携西施泛舟五湖，最终隐居于此。',
+                    bestTime: '春季3-5月',
+                    suggestedDuration: '1-2小时',
+                    reviews: [{user:'传说迷',stars:4,text:'范蠡西施的故事很浪漫，岛上的祠堂值得看。'},{user:'岛主',stars:4,text:'岛不大但精致，适合慢慢逛。'},{user:'历史客',stars:5,text:'春秋时期的传说让这里更有文化底蕴。'}],
+                    panoramaImage: 'images/taogong-dao-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ningbo Taogong Island Dongqian Lake scenic island Chinese garden pavilion immersive wide angle equirectangular'
+                },
+                { 
+                    name: '鼓楼', 
+                    lon: 121.5402, 
+                    lat: 29.8778, 
+                    desc: '宁波地标性建筑，始建于唐长庆元年（821年），是宁波现存最古老的建筑之一。鼓楼楼阁宏伟，可俯瞰宁波城全景。鼓楼步行街是宁波最热闹的商业街之一。', 
+                    icon: 'tower',
+                    image: 'images/gulou-panorama.png',
+                    openingHours: '9:00-21:00',
+                    ticketPrice: '免费',
+                    rating: 4.6,
+                    tags: ['地标', '历史', '商业街', '夜景'],
+                    funFacts: ['始建于821年', '宁波现存最古老建筑', '鼓楼步行街', '城市全景'],
+                    nearbyFood: ['宁波小吃', '烧烤', '奶茶', '海鲜'],
+                    funStories: '宁波鼓楼始建于唐长庆元年（821年），已有1200年历史。鼓楼上有漏刻（古代计时器），曾经全城百姓都靠它来报时。',
+                    bestTime: '四季皆宜',
+                    suggestedDuration: '1-2小时',
+                    reviews: [{user:'逛街达人',stars:5,text:'鼓楼步行街热闹非凡，小吃特别多！'},{user:'古建控',stars:4,text:'千年古楼与现代商业完美融合。'},{user:'吃货',stars:5,text:'油赞子和汤圆是必吃的！'}],
+                    panoramaImage: 'images/gulou-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ningbo Drum Tower ancient Chinese tower landmark traditional architecture city panorama night lights immersive wide angle equirectangular'
+                },
+                { 
+                    name: '雪窦山', 
+                    lon: 121.5542, 
+                    lat: 29.7142, 
+                    desc: '四明山支脉，国家5A级景区，佛教名山。山上有雪窦寺、千丈岩瀑布、妙高台等景点，是弥勒佛的道场。自然风光秀丽，佛教文化底蕴深厚。', 
+                    icon: 'mountain',
+                    image: 'images/xuedou-shan-panorama.png',
+                    openingHours: '8:30-16:30',
+                    ticketPrice: '150元',
+                    rating: 4.8,
+                    tags: ['名山', '佛教', '瀑布', '5A景区'],
+                    funFacts: ['弥勒佛道场', '千丈岩瀑布', '妙高台', '张学良幽禁地'],
+                    nearbyFood: ['奉化芋艿头', '千层饼', '水蜜桃'],
+                    funStories: '雪窦山是弥勒佛的道场，山上的弥勒大佛高达56.74米，是全球最高的坐姿铜制弥勒大佛。张学良曾被幽禁在雪窦山妙高台。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '1天',
+                    reviews: [{user:'登山客',stars:5,text:'千丈岩瀑布太壮观了！不虚此行。'},{user:'佛系旅行',stars:5,text:'弥勒大佛庄严殊胜，心灵得到净化。'},{user:'自然派',stars:4,text:'山间空气清新，就是爬着有点累。'}],
+                    panoramaImage: 'images/xuedou-shan-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Xuedou Mountain Ningbo scenic mountain Buddhist temple waterfall beautiful nature forest immersive wide angle equirectangular'
+                },
+                { 
+                    name: '溪口古镇', 
+                    lon: 121.5292, 
+                    lat: 29.6942, 
+                    desc: '蒋氏故居所在地，历史文化名镇。镇上有丰镐房、玉泰盐铺、武岭门等历史建筑，是了解民国历史的重要场所。古镇依山傍水，风景优美。', 
+                    icon: 'town',
+                    image: 'images/xikou-panorama.png',
+                    openingHours: '8:30-17:00',
+                    ticketPrice: '120元',
+                    rating: 4.7,
+                    tags: ['古镇', '民国', '蒋氏故居', '历史'],
+                    funFacts: ['蒋氏故居', '丰镐房', '武岭门', '民国文化'],
+                    nearbyFood: ['奉化芋艿头', '千层饼', '水蜜桃'],
+                    funStories: '溪口是蒋介石的故乡，丰镐房是蒋氏故居。武岭门上的"武岭"二字由国民党元老于右任题写，而背面则由蒋介石亲笔书写。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '半天-1天',
+                    reviews: [{user:'历史迷',stars:5,text:'民国历史的活教材，非常震撼。'},{user:'古镇控',stars:4,text:'溪口比想象中更美，剡溪穿镇而过。'},{user:'美食家',stars:4,text:'奉化千层饼和水蜜桃必须尝！'}],
+                    panoramaImage: 'images/xikou-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Xikou ancient town Ningbo traditional Chinese town mountains river old buildings scenic immersive wide angle equirectangular'
+                },
+                { 
+                    name: '象山影视城', 
+                    lon: 121.9142, 
+                    lat: 29.4842, 
+                    desc: '中国十大影视基地之一，占地面积1091亩。建有神雕侠侣城、春秋战国城、民国城等多个拍摄场景。可以体验影视拍摄过程，偶遇明星。', 
+                    icon: 'film',
+                    image: 'images/xiangshan-film-panorama.png',
+                    openingHours: '8:30-17:00',
+                    ticketPrice: '150元',
+                    rating: 4.6,
+                    tags: ['影视', '拍摄基地', '明星', '体验'],
+                    funFacts: ['中国十大影视基地', '神雕侠侣拍摄地', '偶遇明星', '穿越体验'],
+                    nearbyFood: ['象山海鲜', '海鲜面', '鱼丸'],
+                    funStories: '象山影视城是《神雕侠侣》《琅琊榜》等热门影视剧的拍摄地，运气好的话可以偶遇正在拍摄的剧组，甚至当一把群演。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '3-4小时',
+                    reviews: [{user:'追剧党',stars:5,text:'看到琅琊榜的取景地太激动了！'},{user:'穿越者',stars:4,text:'古装体验很有趣，适合拍照打卡。'},{user:'家庭游',stars:4,text:'小朋友很喜欢，但夏天比较晒。'}],
+                    panoramaImage: 'images/xiangshan-film-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Xiangshan Film City Ningbo movie studio ancient Chinese city sets palace temple immersive wide angle equirectangular'
+                },
+                { 
+                    name: '松兰山海滨', 
+                    lon: 121.9542, 
+                    lat: 29.4692, 
+                    desc: '象山著名海滨度假区，山海相连，沙滩细腻。有海滨浴场、海上运动、海岛观光等多种旅游项目。是夏季避暑、休闲度假的好去处。', 
+                    icon: 'beach',
+                    image: 'images/songlan-beach-panorama.png',
+                    openingHours: '8:00-18:00',
+                    ticketPrice: '30元',
+                    rating: 4.5,
+                    tags: ['海滨', '沙滩', '避暑', '海上运动'],
+                    funFacts: ['山海相连', '细腻沙滩', '海滨浴场', '海岛观光'],
+                    nearbyFood: ['海鲜', '烧烤', '椰子'],
+                    funStories: '松兰山的沙滩沙质细腻，被称为"华东第一滩"。每逢夏日，这里会举办沙滩音乐节，在海浪声中听音乐别有一番风味。',
+                    bestTime: '夏季6-8月',
+                    suggestedDuration: '半天-1天',
+                    reviews: [{user:'海边控',stars:5,text:'沙质真的很好！海水也很清澈。'},{user:'派对达人',stars:4,text:'沙滩音乐节氛围超赞！'},{user:'亲子游',stars:4,text:'孩子玩沙子玩得不亦乐乎。'}],
+                    panoramaImage: 'images/songlan-beach-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Songlan Mountain beach Ningbo seaside resort sandy beach blue sea coastal scenery immersive wide angle equirectangular'
+                },
+                { 
+                    name: '梁祝文化公园', 
+                    lon: 121.5042, 
+                    lat: 29.8242, 
+                    desc: '梁祝传说发源地，浪漫爱情主题公园。园内有梁山伯庙、祝英台阁、万松书院等景点，是情侣们的打卡胜地。每年举办梁祝文化节。', 
+                    icon: 'heart',
+                    image: 'images/liangzhu-panorama.png',
+                    openingHours: '8:30-17:00',
+                    ticketPrice: '50元',
+                    rating: 4.4,
+                    tags: ['爱情', '浪漫', '传说', '主题公园'],
+                    funFacts: ['梁祝传说发源地', '万松书院', '蝴蝶传说', '爱情圣地'],
+                    nearbyFood: ['宁波小吃', '甜品', '茶点'],
+                    funStories: '梁山伯与祝英台的故事被誉为"东方罗密欧与朱丽叶"，而宁波正是这个凄美爱情传说的发源地，公园内的万松书院据说是二人同窗读书之处。',
+                    bestTime: '春季3-5月',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'浪漫派',stars:4,text:'爱情主题很浪漫，适合情侣来。'},{user:'文化游',stars:4,text:'梁祝故事让人唏嘘，公园很精致。'},{user:'赏花人',stars:5,text:'春天来蝴蝶特别多，很有意境。'}],
+                    panoramaImage: 'images/liangzhu-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Liang Zhu Cultural Park Ningbo romantic love theme park Chinese temple garden scenic immersive wide angle equirectangular'
+                },
+                { 
+                    name: '宁波博物馆', 
+                    lon: 121.5242, 
+                    lat: 29.8392, 
+                    desc: '国家一级博物馆，建筑设计独特，由普利兹克奖得主王澍设计。馆藏文物丰富，展示了宁波七千年的历史文化。建筑本身就是一件艺术品。', 
+                    icon: 'building',
+                    image: 'images/ningbo-museum-panorama.png',
+                    openingHours: '9:00-17:00（周一闭馆）',
+                    ticketPrice: '免费',
+                    rating: 4.7,
+                    tags: ['博物馆', '文化', '建筑', '艺术'],
+                    funFacts: ['普利兹克奖建筑', '国家一级博物馆', '七千年历史', '瓦片外墙'],
+                    nearbyFood: ['宁波小吃', '咖啡', '简餐'],
+                    funStories: '宁波博物馆由普利兹克奖得主王澍设计，外墙使用了从周边村落回收的百万块旧砖瓦，被称为"瓦爿墙"，寓意用记忆的碎片建造未来。',
+                    bestTime: '四季皆宜',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'建筑粉',stars:5,text:'王澍的设计太惊艳了，建筑本身就是展品！'},{user:'博物馆控',stars:4,text:'展览很丰富，免费参观超值。'},{user:'文艺青年',stars:5,text:'瓦爿墙在阳光下特别美，拍照绝佳。'}],
+                    panoramaImage: 'images/ningbo-museum-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ningbo Museum modern architecture art museum exhibition hall contemporary design cultural center immersive wide angle equirectangular'
+                },
+                { 
+                    name: '庆安会馆', 
+                    lon: 121.5692, 
+                    lat: 29.8772, 
+                    desc: '江南现存最大的会馆，妈祖庙。建于清道光年间，是宁波帮商人议事、祭祀的场所，建筑雕刻精美。是了解宁波帮历史和海上丝绸之路的重要场所。', 
+                    icon: 'sail',
+                    image: 'images/qingan-panorama.png',
+                    openingHours: '9:00-17:00',
+                    ticketPrice: '10元',
+                    rating: 4.5,
+                    tags: ['会馆', '妈祖', '雕刻', '海上丝路'],
+                    funFacts: ['江南最大会馆', '妈祖庙', '精美雕刻', '宁波帮'],
+                    nearbyFood: ['海鲜', '宁波小吃'],
+                    funStories: '庆安会馆的戏台藻井由数千块木雕拼接而成，不用一颗钉子，被誉为"浙东第一戏台"。每年妈祖诞辰日，这里都会举行盛大的祭祀活动。',
+                    bestTime: '四季皆宜',
+                    suggestedDuration: '1-2小时',
+                    reviews: [{user:'雕刻迷',stars:5,text:'木雕藻井太精美了！古人的匠心令人惊叹。'},{user:'民俗控',stars:4,text:'妈祖文化很有特色，值得了解。'},{user:'建筑学者',stars:5,text:'清代会馆建筑的典范，学术价值很高。'}],
+                    panoramaImage: 'images/qingan-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Qing An Hall Ningbo traditional Chinese hall Mazu temple intricate carvings historic building immersive wide angle equirectangular'
+                },
+                { 
+                    name: '河姆渡遗址', 
+                    lon: 121.4992, 
+                    lat: 30.0842, 
+                    desc: '中国南方早期新石器时代遗址，距今约7000年。出土了大量文物，证明了长江流域也是中华文明的发源地之一。是了解中国早期文明的重要遗址。', 
+                    icon: 'tower',
+                    image: 'images/hemudu-panorama.png',
+                    openingHours: '8:30-17:00',
+                    ticketPrice: '30元',
+                    rating: 4.6,
+                    tags: ['考古', '遗址', '新石器', '文明'],
+                    funFacts: ['距今7000年', '长江流域文明', '干栏式建筑', '骨耜'],
+                    nearbyFood: ['余姚榨菜', '河姆渡年糕'],
+                    funStories: '河姆渡遗址出土了中国最早的漆器、最早的干栏式建筑遗存和最早的人工栽培稻谷，将中国水稻种植史上推到了7000年前。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'考古迷',stars:5,text:'7000年前的文明太震撼了！骨耜和稻谷让人感叹。'},{user:'亲子教育',stars:5,text:'带孩子来学习史前文明，非常涨知识。'},{user:'历史系学生',stars:4,text:'遗址保护得不错，但展馆可以再丰富些。'}],
+                    panoramaImage: 'images/hemudu-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Hemudu archaeological site Ningbo ancient Chinese civilization museum prehistoric culture immersive wide angle equirectangular'
+                },
+                { 
+                    name: '招宝山', 
+                    lon: 121.6992, 
+                    lat: 29.9342, 
+                    desc: '甬江入海口关隘，海防历史遗迹丰富。山上有威远城、安远炮台、招宝山塔等景点，是爱国主义教育基地。可以俯瞰甬江入海口的壮丽景色。', 
+                    icon: 'shield',
+                    image: 'images/zhaobao-shan-panorama.png',
+                    openingHours: '8:30-17:00',
+                    ticketPrice: '60元',
+                    rating: 4.4,
+                    tags: ['海防', '历史', '关隘', '爱国主义'],
+                    funFacts: ['甬江入海口', '威远城', '安远炮台', '海防历史'],
+                    nearbyFood: ['海鲜', '镇海特产'],
+                    funStories: '招宝山因"当海口，商舶往来，百货山积"而得名，是浙东的咽喉要地。中法战争期间，招宝山炮台曾击退法国舰队，成为中国近代史上少有的胜仗。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'军事迷',stars:5,text:'海防遗址保存完好，中法战争的故事很震撼！'},{user:'观景控',stars:4,text:'山顶可以远眺甬江入海口，景色壮丽。'},{user:'登山客',stars:4,text:'山不高但很有历史厚重感。'}],
+                    panoramaImage: 'images/zhaobao-shan-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Zhaobao Mountain Ningbo historic fortress ancient tower coastal defense scenic overlook river mouth immersive wide angle equirectangular'
+                },
+                { 
+                    name: '保国寺', 
+                    lon: 121.5782, 
+                    lat: 29.9282, 
+                    desc: '江南现存最古老的木结构建筑之一，始建于东汉，现存大殿为北宋建筑。寺内建筑精湛，保存完好，是全国重点文物保护单位，被誉为"江南一绝"。', 
+                    icon: 'temple',
+                    image: 'images/baoguo-temple-panorama.png',
+                    openingHours: '8:30-16:30',
+                    ticketPrice: '20元',
+                    rating: 4.5,
+                    tags: ['古建', '木结构', '北宋', '文物'],
+                    funFacts: ['江南最古老木结构', '北宋建筑', '无钉结构', '江南一绝'],
+                    nearbyFood: ['宁波小吃', '素食'],
+                    funStories: '保国寺大殿是江南现存最古老的木结构建筑，建于北宋大中祥符六年（1013年），最神奇的是殿内鸟不入、虫不蛀、蛛不网，堪称建筑奇迹。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '1-2小时',
+                    reviews: [{user:'古建迷',stars:5,text:'千年木构无钉无蛀，太不可思议了！'},{user:'文化旅者',stars:5,text:'比想象中更震撼，真正的国宝。'},{user:'建筑学生',stars:5,text:'斗拱结构教科书般的实物，必来朝圣。'}],
+                    panoramaImage: 'images/baoguo-temple-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Baoguo Temple Ningbo ancient Chinese wooden temple Song Dynasty architecture cultural heritage immersive wide angle equirectangular'
+                },
+                { 
+                    name: '前童古镇', 
+                    lon: 121.4682, 
+                    lat: 29.3882, 
+                    desc: '宁海县著名古镇，始建于南宋，保存了大量明清古建筑。古镇以八卦水系为特色，家家门前有流水，是浙东地区保存最完整的古村落之一。', 
+                    icon: 'town',
+                    image: 'images/qiantong-panorama.png',
+                    openingHours: '8:00-17:00',
+                    ticketPrice: '70元',
+                    rating: 4.5,
+                    tags: ['古镇', '八卦水系', '古村落', '明清'],
+                    funFacts: ['八卦水系', '家家门前流水', '南宋始建', '浙东古村'],
+                    nearbyFood: ['前童豆腐', '麦饼', '汤包'],
+                    funStories: '前童古镇的八卦水系是明代大儒方孝孺设计的，家家门前有活水流过。这里还是电影《理发师》的拍摄地，古镇的烟火气让人流连忘返。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '3-4小时',
+                    reviews: [{user:'水乡迷',stars:5,text:'门前流水的格局太独特了，别的古镇看不到。'},{user:'美食家',stars:5,text:'前童豆腐和麦饼绝了！必吃。'},{user:'慢旅者',stars:4,text:'比其他古镇安静很多，适合慢慢感受。'}],
+                    panoramaImage: 'images/qiantong-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Qiantong ancient town Ningbo traditional Chinese village water canals old streets architecture immersive wide angle equirectangular'
+                },
+                { 
+                    name: '五龙潭', 
+                    lon: 121.5282, 
+                    lat: 29.7982, 
+                    desc: '四明山北麓的自然风景区，以龙潭飞瀑、奇山怪石著称。景区内有五个龙潭，景色秀丽，空气清新，是宁波市民周末休闲的好去处。', 
+                    icon: 'wave',
+                    image: 'images/wulongtan-panorama.png',
+                    openingHours: '8:00-17:00',
+                    ticketPrice: '60元',
+                    rating: 4.4,
+                    tags: ['自然', '瀑布', '山林', '休闲'],
+                    funFacts: ['五个龙潭', '飞瀑奇观', '四明山', '天然氧吧'],
+                    nearbyFood: ['农家菜', '野味', '山货'],
+                    funStories: '五龙潭因五个潭瀑相连如龙而得名，当地百姓相信每条龙掌管一方风雨。每逢大旱，村民便来此祈雨，据说颇为灵验。',
+                    bestTime: '夏季6-8月',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'瀑布控',stars:5,text:'五个潭各有特色，瀑布清凉解暑！'},{user:'避暑族',stars:4,text:'夏天来最合适，比城里凉快很多。'},{user:'徒步者',stars:4,text:'山路不算太难，适合全家出行。'}],
+                    panoramaImage: 'images/wulongtan-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Five Dragon Pools Ningbo waterfall scenic area beautiful nature mountain stream rocks forest immersive wide angle equirectangular'
+                },
+                { 
+                    name: '九龙湖', 
+                    lon: 121.4282, 
+                    lat: 29.9682, 
+                    desc: '镇海区的大型山水度假区，湖光山色，风景优美。景区内有九龙湖水库、香山寺、猴岛等景点，适合度假休闲、登山徒步。', 
+                    icon: 'lake',
+                    image: 'images/jiulong-lake-panorama.png',
+                    openingHours: '8:00-17:00',
+                    ticketPrice: '40元',
+                    rating: 4.5,
+                    tags: ['湖泊', '度假', '山水', '休闲'],
+                    funFacts: ['九龙湖水库', '香山寺', '猴岛', '环湖徒步'],
+                    nearbyFood: ['湖鲜', '农家菜'],
+                    funStories: '九龙湖的名字来源于当地传说：九条龙下凡在此戏水，留下了九个湾，如今筑坝成湖，湖岸蜿蜒如龙。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'环湖控',stars:4,text:'环湖步道修得很好，骑行也很棒。'},{user:'垂钓者',stars:4,text:'湖鱼鲜美，钓鱼体验不错。'},{user:'度假族',stars:5,text:'民宿品质很高，适合周末度假。'}],
+                    panoramaImage: 'images/jiulong-lake-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Jiulong Lake Ningbo beautiful lake scenic resort mountains pagoda tourism recreation immersive wide angle equirectangular'
+                },
+                { 
+                    name: '南塘老街', 
+                    lon: 121.5482, 
+                    lat: 29.8582, 
+                    desc: '宁波古城南门外的历史街区，曾经是"南门三市"的商贸中心。街区保留了传统街巷和古建筑，现在是集餐饮、购物、文化体验于一体的休闲街区。', 
+                    icon: 'shop',
+                    image: 'images/nantang-panorama.png',
+                    openingHours: '10:00-22:00',
+                    ticketPrice: '免费',
+                    rating: 4.6,
+                    tags: ['老街', '美食', '购物', '文化'],
+                    funFacts: ['南门三市', '传统街巷', '百年老店', '宁波小吃'],
+                    nearbyFood: ['油赞子', '汤圆', '年糕', '南塘豆酥糖'],
+                    funStories: '南塘老街曾是宁波最繁华的"南门三市"之一，老街上的缸鸭狗汤圆店始创于1926年，名字来自创始人江定发的昵称，与缸、鸭、狗毫无关系。',
+                    bestTime: '四季皆宜',
+                    suggestedDuration: '1-2小时',
+                    reviews: [{user:'吃货王',stars:5,text:'油赞子、汤圆、年糕...一路吃到底！'},{user:'老宁波',stars:5,text:'最正宗的宁波味道都在这里了。'},{user:'文艺范',stars:4,text:'老街翻新后既有古韵又很干净，不错。'}],
+                    panoramaImage: 'images/nantang-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Nantang Old Street Ningbo traditional Chinese street food market old buildings cultural district immersive wide angle equirectangular'
+                },
+                { 
+                    name: '杭州湾湿地公园', 
+                    lon: 121.1882, 
+                    lat: 30.2382, 
+                    desc: '中国八大盐碱湿地之一，面积约43.5平方公里。这里是候鸟的天堂，有大量珍稀鸟类栖息。公园内还有湿地博物馆、观鸟台等设施。', 
+                    icon: 'bird',
+                    image: 'images/hangzhou-bay-wetland-panorama.png',
+                    openingHours: '8:00-17:00',
+                    ticketPrice: '80元',
+                    rating: 4.6,
+                    tags: ['湿地', '候鸟', '自然', '生态'],
+                    funFacts: ['八大盐碱湿地', '候鸟天堂', '珍稀鸟类', '湿地博物馆'],
+                    nearbyFood: ['海鲜', '农家菜'],
+                    funStories: '杭州湾湿地是候鸟迁徙的重要中转站，每年有超过100种鸟类在此停歇，其中包括全球仅存不到1000只的极危物种——勺嘴鹬。',
+                    bestTime: '秋冬季10-2月',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'观鸟者',stars:5,text:'秋冬候鸟季来太壮观了！看到很多珍稀鸟类。'},{user:'亲子游',stars:4,text:'湿地博物馆很有教育意义，孩子学到很多。'},{user:'自然控',stars:5,text:'芦苇荡的日落美得窒息，拍照绝佳。'}],
+                    panoramaImage: 'images/hangzhou-bay-wetland-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Hangzhou Bay Wetland Park Ningbo birds nature reserve wetland ecosystem beautiful landscape immersive wide angle equirectangular'
+                },
+                { 
+                    name: '达蓬山', 
+                    lon: 121.3882, 
+                    lat: 30.0382, 
+                    desc: '慈溪市的名山，海拔428米。山上有达蓬山仙佛谷景区、达蓬山温泉、主题乐园等景点。传说徐福曾从这里东渡日本。', 
+                    icon: 'mountain',
+                    image: 'images/dapeng-shan-panorama.png',
+                    openingHours: '8:30-17:00',
+                    ticketPrice: '100元',
+                    rating: 4.5,
+                    tags: ['名山', '温泉', '主题乐园', '历史'],
+                    funFacts: ['徐福东渡传说', '仙佛谷', '温泉度假', '主题乐园'],
+                    nearbyFood: ['慈溪杨梅', '农家菜'],
+                    funStories: '达蓬山之名取"到达蓬莱"之意，相传秦始皇曾派徐福从此处出海寻仙。如今山上仙佛谷的摩崖石刻记录着这段千年寻仙传说。',
+                    bestTime: '春秋3-5月/9-11月',
+                    suggestedDuration: '半天-1天',
+                    reviews: [{user:'温泉控',stars:5,text:'冬天来泡温泉太享受了！'},{user:'寻仙客',stars:4,text:'徐福东渡的传说很有意思，摩崖石刻值得看。'},{user:'亲子游',stars:4,text:'主题乐园孩子玩得很开心。'}],
+                    panoramaImage: 'images/dapeng-shan-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Dapeng Mountain Ningbo scenic mountain temples beautiful nature ancient trails tourism immersive wide angle equirectangular'
+                },
+                { 
+                    name: '渔山列岛', 
+                    lon: 122.2882, 
+                    lat: 28.8382, 
+                    desc: '象山县东南海域的岛屿群，由54个岛屿组成。这里海水清澈见底，是中国最美的海岛之一。适合海钓、潜水、露营等户外活动。', 
+                    icon: 'island',
+                    image: 'images/yushan-islands-panorama.png',
+                    openingHours: '全天开放',
+                    ticketPrice: '免费（需乘船）',
+                    rating: 4.7,
+                    tags: ['海岛', '海钓', '潜水', '露营'],
+                    funFacts: ['54个岛屿', '中国最美海岛', '清澈海水', '海钓圣地'],
+                    nearbyFood: ['海鲜', '渔家菜'],
+                    funStories: '渔山列岛是中国领海基点之一，岛上灯塔建于1895年，至今仍在使用。这里的海水能见度可达10米以上，被誉为"亚洲第一钓场"。',
+                    bestTime: '5-10月',
+                    suggestedDuration: '2-3天',
+                    reviews: [{user:'海钓王',stars:5,text:'亚洲第一钓场名不虚传！大物不断。'},{user:'潜水控',stars:5,text:'海水清澈得像马尔代夫，太梦幻了！'},{user:'露营客',stars:4,text:'岛上露营看银河，人生必去体验。'}],
+                    panoramaImage: 'images/yushan-islands-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Yushan Islands Ningbo beautiful islands clear blue sea coastal scenery outdoor activities immersive wide angle equirectangular'
+                },
+                { 
+                    name: '阿育王寺', 
+                    lon: 121.6182, 
+                    lat: 29.8382, 
+                    desc: '中国佛教"五山第五"，素有"东南佛国"之称。寺内珍藏释迦牟尼真身舍利及舍利宝塔，是全国汉族地区佛教重点寺院。', 
+                    icon: 'temple',
+                    image: 'images/ayuwang-temple-panorama.png',
+                    openingHours: '6:00-17:00',
+                    ticketPrice: '免费',
+                    rating: 4.5,
+                    tags: ['佛教', '寺庙', '舍利', '古迹'],
+                    funFacts: ['东南佛国', '真身舍利', '五山第五', '千年古寺'],
+                    nearbyFood: ['素食', '宁波小吃'],
+                    funStories: '阿育王寺因珍藏释迦牟尼真身舍利而闻名，寺内的舍利塔据传是阿育王所造的八万四千座舍利塔之一，是中国现存唯一的佛祖真身舍利塔。',
+                    bestTime: '四季皆宜',
+                    suggestedDuration: '1-2小时',
+                    reviews: [{user:'佛学爱好者',stars:5,text:'能亲见佛祖舍利，殊胜因缘，非常感动。'},{user:'古建迷',stars:4,text:'千年古寺气场庄严，建筑保存完好。'},{user:'禅修者',stars:5,text:'寺中清幽，适合静心冥想。'}],
+                    panoramaImage: 'images/ayuwang-temple-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Ayuwang Temple Ningbo ancient Buddhist temple pagoda traditional Chinese architecture cultural heritage immersive wide angle equirectangular'
+                },
+                { 
+                    name: '天一广场', 
+                    lon: 121.5582, 
+                    lat: 29.8782, 
+                    desc: '宁波最繁华的商业中心，集购物、休闲、娱乐、餐饮于一体。广场上有标志性的音乐喷泉、水幕电影，是宁波的城市地标之一。', 
+                    icon: 'shop',
+                    image: 'images/tianyi-square-panorama.png',
+                    openingHours: '10:00-22:00',
+                    ticketPrice: '免费',
+                    rating: 4.6,
+                    tags: ['商业', '购物', '地标', '娱乐'],
+                    funFacts: ['音乐喷泉', '水幕电影', '城市地标', '繁华商圈'],
+                    nearbyFood: ['各种美食', '快餐', '甜品'],
+                    funStories: '天一广场的音乐喷泉是宁波的地标打卡点，喷泉最高可达40米，配合灯光和音乐，每逢节假日的喷泉秀吸引数万人驻足观看。',
+                    bestTime: '四季皆宜',
+                    suggestedDuration: '2-3小时',
+                    reviews: [{user:'购物狂',stars:5,text:'吃喝玩乐一站式解决，太方便了！'},{user:'喷泉控',stars:5,text:'音乐喷泉太美了，晚上必看！'},{user:'夜游族',stars:4,text:'商圈氛围很好，就是节假日人太多。'}],
+                    panoramaImage: 'images/tianyi-square-panorama.png',
+                    panoramaPrompt: '360 degree panoramic view of Tianyi Square Ningbo modern city center shopping mall fountain night lights urban landmark immersive wide angle equirectangular'
+                }
+            ];
+
+            const knowledgeBase = [
+                { keywords: ['天一阁', '藏书', '范钦', '藏书楼'], answer: '天一阁是中国现存最早的私家藏书楼，始建于明嘉靖四十年（1561年），由范钦建造。藏书七万余卷，以地方志和登科录最为珍贵。天一阁还是全国重点文物保护单位。' },
+                { keywords: ['月湖', '湖泊', '母亲湖'], answer: '月湖开凿于唐代，是宁波的母亲湖。湖畔有很多历史建筑和书院，是宁波文化的发源地。月湖十景闻名遐迩，是市民休闲的好去处。' },
+                { keywords: ['老外滩', '外滩', '夜景', '酒吧'], answer: '老外滩是中国最早的外滩之一，保留了大量欧式建筑。现在是宁波最热闹的夜生活区，有很多餐厅和酒吧。夜晚灯光璀璨，是宁波最美的夜景地之一。' },
+                { keywords: ['慈城', '古县城', '县衙', '孔庙'], answer: '慈城古县城是江南保存最完整的古县城，有千年历史。县衙、孔庙、城隍庙等古建筑保存完好。城内还有众多传统小吃，是体验江南古镇文化的绝佳去处。' },
+                { keywords: ['东钱湖', '湖泊', '度假'], answer: '东钱湖是浙江最大的天然淡水湖，面积22平方公里。湖中有十景，周边有陶公岛、小普陀等景点，是宁波重要的旅游度假区。湖光山色，风景秀丽。' },
+                { keywords: ['鼓楼', '地标', '建筑'], answer: '鼓楼是宁波地标性建筑，始建于唐长庆元年（821年），是宁波现存最古老的建筑之一。鼓楼楼阁宏伟，可俯瞰宁波城全景。鼓楼步行街是宁波最热闹的商业街之一。' },
+                { keywords: ['雪窦山', '瀑布', '弥勒', '佛教'], answer: '雪窦山是国家5A级景区，佛教名山。山上有雪窦寺（弥勒道场）、千丈岩瀑布、妙高台等景点。自然风光秀丽，佛教文化底蕴深厚。' },
+                { keywords: ['溪口', '蒋氏', '故居'], answer: '溪口是蒋氏故居所在地，有丰镐房、玉泰盐铺、武岭门等历史建筑，是了解民国历史的重要场所。古镇依山傍水，风景优美。' },
+                { keywords: ['象山影视城', '影视', '拍摄'], answer: '象山影视城是中国十大影视基地之一，占地面积1091亩。建有神雕侠侣城、春秋战国城、民国城等多个拍摄场景。可以体验影视拍摄过程，偶遇明星。' },
+                { keywords: ['松兰山', '海滨', '沙滩'], answer: '松兰山海滨度假区山海相连，沙滩细腻，是象山著名的海滨旅游胜地。有海滨浴场、海上运动、海岛观光等多种旅游项目，是夏季避暑的好去处。' },
+                { keywords: ['梁祝', '爱情', '公园'], answer: '梁祝文化公园是梁祝传说发源地，浪漫爱情主题公园。园内有梁山伯庙、祝英台阁、万松书院等景点，是情侣们的浪漫之地。每年举办梁祝文化节。' },
+                { keywords: ['宁波博物馆', '博物馆', '王澍'], answer: '宁波博物馆是国家一级博物馆，由普利兹克奖得主王澍设计。建筑本身就是一件艺术品，馆藏文物丰富，展示了宁波七千年的历史文化。' },
+                { keywords: ['庆安会馆', '妈祖', '会馆'], answer: '庆安会馆是江南现存最大的会馆，也是妈祖庙。建于清道光年间，是宁波帮商人议事、祭祀的场所，建筑雕刻精美。' },
+                { keywords: ['河姆渡', '遗址', '新石器'], answer: '河姆渡遗址距今约7000年，是中国南方早期新石器时代遗址。出土了大量文物，证明了长江流域也是中华文明的发源地之一。' },
+                { keywords: ['招宝山', '海防', '炮台'], answer: '招宝山是甬江入海口关隘，有威远城、安远炮台、招宝山塔等海防遗迹，是爱国主义教育基地。可以俯瞰甬江入海口的壮丽景色。' },
+                { keywords: ['美食', '小吃', '宁波菜'], answer: '宁波美食以海鲜和小吃闻名！推荐：宁波汤圆（黑芝麻猪油馅，软糯香甜）、宁波年糕（洁白如玉，口感软糯，可炒煮烤）、臭冬瓜（闻着臭吃着香的特色菜）、海鲜面（鲜美的海鲜配劲道面条）、冰糖甲鱼（宁波十大名菜之首）、红膏炝蟹（咸鲜可口）、葱油泥螺（鲜美嫩滑）。' },
+                { keywords: ['汤圆', '宁波汤圆'], answer: '宁波汤圆是著名小吃，以黑芝麻、猪油为馅，软糯香甜。尤其是缸鸭狗汤圆，百年老店，味道正宗！' },
+                { keywords: ['年糕', '宁波年糕'], answer: '宁波年糕以晚粳米为原料，洁白如玉，口感软糯。可以炒年糕（配青菜肉丝）、煮年糕汤、烤年糕，每种吃法都很美味！' },
+                { keywords: ['海鲜', '宁波海鲜'], answer: '宁波靠海，海鲜新鲜便宜！推荐：梭子蟹（秋季最肥）、大黄鱼（肉质鲜嫩）、虾蛄（皮皮虾）、泥螺（鲜美嫩滑）、淡菜（贻贝）。象山海鲜尤其出名！' },
+                { keywords: ['历史', '宁波历史'], answer: '宁波有七千年文明史，古称"明州"，是海上丝绸之路的起点之一。河姆渡遗址证明了长江流域也是中华文明的发源地。宁波还是著名的"宁波帮"发源地。' },
+                { keywords: ['旅游', '攻略', '推荐'], answer: '推荐路线：第一天：天一阁→月湖→鼓楼步行街→老外滩夜景；第二天：东钱湖一日游；第三天：溪口→雪窦山；第四天：象山影视城→松兰山海滨。' },
+                { keywords: ['特产', '宁波特产'], answer: '宁波特产：宁波汤圆、宁波年糕、海鲜干货（虾皮、紫菜、鱼干）、奉化水蜜桃（皮薄汁多）、慈溪杨梅（酸甜可口）、宁海白枇杷。' },
+                { keywords: ['天气', '气候'], answer: '宁波属亚热带季风气候，四季分明。春季温暖多雨，夏季炎热潮湿，秋季凉爽宜人，冬季温和少雨。最佳旅游季节是春秋两季。' },
+                { keywords: ['交通', '出行'], answer: '宁波交通便利：有机场（宁波栎社国际机场）、高铁（宁波站）。市内地铁已开通多条线路，景点之间可乘公交或打车。' },
+                { keywords: ['住宿', '酒店'], answer: '宁波住宿选择多样：市区有五星级酒店（如宁波万豪、威斯汀），老外滩附近有特色民宿，东钱湖有度假酒店，溪口有古镇客栈。' },
+                { keywords: ['购物', '商场'], answer: '宁波购物推荐：天一广场（市中心最大商圈）、鼓楼步行街（特色小吃和纪念品）、老外滩（时尚购物和餐饮）、鄞州万达（大型购物中心）。' },
+                { keywords: ['欢迎', '你好', '嗨'], answer: '你好！欢迎来到宁波智慧文旅！我可以为你介绍宁波的景点、美食、历史文化、旅游攻略等信息！' },
+                { keywords: ['谢谢', '感谢'], answer: '不客气！祝你在宁波玩得愉快！宁波欢迎你再来！' },
+                { keywords: ['帮我', '推荐', '建议'], answer: '当然可以！你想了解宁波的景点、美食还是旅游攻略？告诉我你的需求，我来帮你推荐！' },
+                { keywords: ['介绍', '简介'], answer: '宁波是一座历史文化名城，拥有七千年文明史。这里有天一阁、月湖、老外滩等众多景点，还有美味的海鲜和特色小吃。欢迎来宁波旅游！' }
+            ];
+
+            const sidebarList = document.getElementById('sidebarList');
+            const tooltip = document.getElementById('tooltip');
+            const tooltipName = document.getElementById('tooltipName');
+            const tooltipDesc = document.getElementById('tooltipDesc');
+            const customInfobox = document.getElementById('customInfobox');
+            const infoboxImage = document.getElementById('infoboxImage');
+            const infoboxTitle = document.getElementById('infoboxTitle');
+            const infoboxDesc = document.getElementById('infoboxDesc');
+            const infoboxRating = document.getElementById('infoboxRating');
+            const ratingValue = document.getElementById('ratingValue');
+            const infoboxTags = document.getElementById('infoboxTags');
+            const infoboxHours = document.getElementById('infoboxHours');
+            const infoboxPrice = document.getElementById('infoboxPrice');
+            const infoboxFacts = document.getElementById('infoboxFacts');
+            const infoboxFood = document.getElementById('infoboxFood');
+
+            const infoboxBestTime = document.getElementById('infoboxBestTime');
+            const infoboxDuration = document.getElementById('infoboxDuration');
+            const infoboxStory = document.getElementById('infoboxStory');
+            const infoboxNearby = document.getElementById('infoboxNearby');
+            const infoboxReviews = document.getElementById('infoboxReviews');
+
+            function updateInfobox(attr) {
+                infoboxImage.src = attr.image;
+                infoboxTitle.textContent = attr.name;
+                infoboxDesc.textContent = attr.desc;
+                updateWeatherForAttraction(attr.name);
+                
+                ratingValue.textContent = attr.rating || '--';
+                infoboxHours.textContent = attr.openingHours || '--';
+                infoboxPrice.textContent = attr.ticketPrice || '--';
+                infoboxBestTime.textContent = attr.bestTime || '--';
+                infoboxDuration.textContent = attr.suggestedDuration || '--';
+                
+                infoboxTags.innerHTML = '';
+                if (attr.tags) {
+                    attr.tags.forEach(tag => {
+                        const span = document.createElement('span');
+                        span.className = 'tag';
+                        span.textContent = tag;
+                        infoboxTags.appendChild(span);
+                    });
+                }
+                
+                infoboxStory.textContent = attr.funStories || '暂无趣闻轶事';
+                
+                infoboxFacts.innerHTML = '';
+                if (attr.funFacts) {
+                    attr.funFacts.forEach(fact => {
+                        const li = document.createElement('li');
+                        li.textContent = fact;
+                        infoboxFacts.appendChild(li);
+                    });
+                }
+                
+                infoboxFood.innerHTML = '';
+                if (attr.nearbyFood) {
+                    attr.nearbyFood.forEach(food => {
+                        const span = document.createElement('span');
+                        span.className = 'food-item';
+                        span.textContent = food;
+                        infoboxFood.appendChild(span);
+                    });
+                }
+                
+                // 附近景点（基于距离计算）
+                infoboxNearby.innerHTML = '';
+                const nearbyAttrs = attractions
+                    .map(a => {
+                        const dLat = (a.lat - attr.lat) * Math.PI / 180;
+                        const dLon = (a.lon - attr.lon) * Math.PI / 180;
+                        const rLat1 = attr.lat * Math.PI / 180;
+                        const rLat2 = a.lat * Math.PI / 180;
+                        const sinLat = Math.sin(dLat / 2);
+                        const sinLon = Math.sin(dLon / 2);
+                        const dist = 2 * 6371000 * Math.asin(Math.sqrt(sinLat * sinLat + Math.cos(rLat1) * Math.cos(rLat2) * sinLon * sinLon));
+                        return { name: a.name, icon: a.icon, dist: dist };
+                    })
+                    .filter(a => a.name !== attr.name && a.dist <= 5000)
+                    .sort((a, b) => a.dist - b.dist)
+                    .slice(0, 3);
+                
+                if (nearbyAttrs.length === 0) {
+                    infoboxNearby.innerHTML = '<span style="font-size:13px;color:#999;">5公里内暂无其他景点</span>';
+                } else {
+                    nearbyAttrs.forEach(na => {
+                        const div = document.createElement('div');
+                        div.className = 'nearby-item';
+                        const distText = na.dist < 1000 ? Math.round(na.dist) + 'm' : (na.dist / 1000).toFixed(1) + 'km';
+                        div.innerHTML = '<span class="nearby-dot"></span><span class="nearby-name">' + na.name + '</span><span class="nearby-dist">' + distText + '</span>';
+                        div.addEventListener('click', () => {
+                            const target = attractions.find(a => a.name === na.name);
+                            if (target) {
+                                const sceneMode = viewer.scene.mode;
+                                const flyOpts = {
+                                    duration: 2,
+                                    complete: () => {
+                                        setTimeout(() => {
+                                            updateInfobox(target);
+                                            customInfobox.classList.add('show');
+                                        }, 500);
+                                    }
+                                };
+                                if (sceneMode === Cesium.SceneMode.SCENE3D) {
+                                    viewer.flyTo(entityMap[target.name], {
+                                        offset: new Cesium.HeadingPitchRange(0, -Math.PI / 2.2, 500),
+                                        duration: 2,
+                                        complete: flyOpts.complete
+                                    });
+                                } else {
+                                    viewer.camera.flyTo({
+                                        destination: Cesium.Cartesian3.fromDegrees(target.lon, target.lat, 8000),
+                                        orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+                                        duration: 2,
+                                        complete: flyOpts.complete
+                                    });
+                                }
+                                document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+                                const sidebarItems = document.querySelectorAll('.sidebar-item');
+                                sidebarItems.forEach(item => {
+                                    if (item.textContent.trim().includes(target.name)) item.classList.add('active');
+                                });
+                            }
+                        });
+                        infoboxNearby.appendChild(div);
+                    });
+                }
+                
+                // 游客评价
+                infoboxReviews.innerHTML = '';
+                if (attr.reviews && attr.reviews.length > 0) {
+                    attr.reviews.forEach(review => {
+                        const div = document.createElement('div');
+                        div.className = 'review-item';
+                        const starsStr = '★'.repeat(review.stars) + '☆'.repeat(5 - review.stars);
+                        div.innerHTML = '<div class="review-header"><span class="review-avatar">' + review.user.charAt(0) + '</span><span class="review-name">' + review.user + '</span><span class="review-stars">' + starsStr + '</span></div><div class="review-text">' + review.text + '</div>';
+                        infoboxReviews.appendChild(div);
+                    });
+                } else {
+                    infoboxReviews.innerHTML = '<span style="font-size:13px;color:#999;">暂无评价</span>';
+                }
+                
+                const actionPanorama = document.getElementById('actionPanorama');
+                if (actionPanorama) {
+                    actionPanorama.style.display = attr.panoramaImage ? 'flex' : 'none';
+                }
+            }
+
+            const entityMap = {};
+
+            function drawMinimalIcon(ctx, iconType, x, y, size) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.strokeStyle = '#00bcd4';
+                ctx.fillStyle = '#00bcd4';
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                const s = size / 24;
+                ctx.scale(s, s);
+                ctx.translate(12, 12);
+                
+                switch(iconType) {
+                    case 'book':
+                        ctx.beginPath();
+                        ctx.moveTo(-8, -10);
+                        ctx.lineTo(8, -10);
+                        ctx.lineTo(8, 10);
+                        ctx.lineTo(-8, 10);
+                        ctx.quadraticCurveTo(-10, 10, -10, 8);
+                        ctx.lineTo(-10, -8);
+                        ctx.quadraticCurveTo(-10, -10, -8, -10);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(-6, -6);
+                        ctx.lineTo(6, -6);
+                        ctx.moveTo(-6, -2);
+                        ctx.lineTo(6, -2);
+                        ctx.moveTo(-6, 2);
+                        ctx.lineTo(4, 2);
+                        ctx.stroke();
+                        break;
+                    case 'wave':
+                        ctx.beginPath();
+                        ctx.moveTo(-10, -4);
+                        ctx.quadraticCurveTo(-7, -7, -4, -4);
+                        ctx.quadraticCurveTo(-1, -1, 2, -4);
+                        ctx.quadraticCurveTo(5, -7, 8, -4);
+                        ctx.quadraticCurveTo(10, -2, 10, -4);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(-10, 2);
+                        ctx.quadraticCurveTo(-7, -1, -4, 2);
+                        ctx.quadraticCurveTo(-1, 5, 2, 2);
+                        ctx.quadraticCurveTo(5, -1, 8, 2);
+                        ctx.quadraticCurveTo(10, 4, 10, 2);
+                        ctx.stroke();
+                        break;
+                    case 'city':
+                        ctx.strokeRect(-8, -2, 5, 10);
+                        ctx.strokeRect(-2, -6, 5, 14);
+                        ctx.strokeRect(4, 0, 4, 8);
+                        break;
+                    case 'temple':
+                        ctx.beginPath();
+                        ctx.moveTo(-10, 10);
+                        ctx.lineTo(-10, 2);
+                        ctx.lineTo(0, -8);
+                        ctx.lineTo(10, 2);
+                        ctx.lineTo(10, 10);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(-6, 10);
+                        ctx.lineTo(-6, 4);
+                        ctx.lineTo(6, 4);
+                        ctx.lineTo(6, 10);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(0, -8);
+                        ctx.lineTo(0, -10);
+                        ctx.stroke();
+                        break;
+                    case 'lake':
+                        ctx.beginPath();
+                        ctx.moveTo(-10, 6);
+                        ctx.quadraticCurveTo(-7, 3, -4, 6);
+                        ctx.quadraticCurveTo(-1, 9, 2, 6);
+                        ctx.quadraticCurveTo(5, 3, 8, 6);
+                        ctx.quadraticCurveTo(10, 8, 10, 6);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(-10, 2);
+                        ctx.quadraticCurveTo(-7, -1, -4, 2);
+                        ctx.quadraticCurveTo(-1, 5, 2, 2);
+                        ctx.quadraticCurveTo(5, -1, 8, 2);
+                        ctx.quadraticCurveTo(10, 4, 10, 2);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(-3, -6);
+                        ctx.lineTo(0, -10);
+                        ctx.lineTo(3, -6);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(0, -10);
+                        ctx.lineTo(0, -2);
+                        ctx.stroke();
+                        break;
+                    case 'tower':
+                        ctx.beginPath();
+                        ctx.moveTo(-4, 10);
+                        ctx.lineTo(-4, 0);
+                        ctx.lineTo(-6, 0);
+                        ctx.lineTo(-5, -4);
+                        ctx.lineTo(-3, -4);
+                        ctx.lineTo(-2, -8);
+                        ctx.lineTo(2, -8);
+                        ctx.lineTo(3, -4);
+                        ctx.lineTo(5, -4);
+                        ctx.lineTo(6, 0);
+                        ctx.lineTo(4, 0);
+                        ctx.lineTo(4, 10);
+                        ctx.stroke();
+                        break;
+                    case 'mountain':
+                        ctx.beginPath();
+                        ctx.moveTo(-10, 10);
+                        ctx.lineTo(-3, -6);
+                        ctx.lineTo(2, 2);
+                        ctx.lineTo(6, -4);
+                        ctx.lineTo(10, 10);
+                        ctx.closePath();
+                        ctx.stroke();
+                        break;
+                    case 'town':
+                        ctx.beginPath();
+                        ctx.moveTo(-10, 10);
+                        ctx.lineTo(-10, -2);
+                        ctx.lineTo(-5, -6);
+                        ctx.lineTo(0, -2);
+                        ctx.lineTo(0, 10);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(0, 10);
+                        ctx.lineTo(0, 2);
+                        ctx.lineTo(5, -2);
+                        ctx.lineTo(10, 2);
+                        ctx.lineTo(10, 10);
+                        ctx.stroke();
+                        break;
+                    case 'film':
+                        ctx.strokeRect(-8, -8, 16, 16);
+                        ctx.beginPath();
+                        ctx.moveTo(-4, -8);
+                        ctx.lineTo(-4, 8);
+                        ctx.moveTo(4, -8);
+                        ctx.lineTo(4, 8);
+                        ctx.moveTo(-8, 0);
+                        ctx.lineTo(8, 0);
+                        ctx.stroke();
+                        break;
+                    case 'beach':
+                        ctx.beginPath();
+                        ctx.moveTo(-10, 6);
+                        ctx.quadraticCurveTo(-7, 3, -4, 6);
+                        ctx.quadraticCurveTo(-1, 9, 2, 6);
+                        ctx.quadraticCurveTo(5, 3, 8, 6);
+                        ctx.quadraticCurveTo(10, 8, 10, 6);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(5, -4, 3, 0, Math.PI * 2);
+                        ctx.stroke();
+                        break;
+                    case 'heart':
+                        ctx.beginPath();
+                        ctx.moveTo(0, 8);
+                        ctx.bezierCurveTo(-12, 0, -6, -10, 0, -4);
+                        ctx.bezierCurveTo(6, -10, 12, 0, 0, 8);
+                        ctx.stroke();
+                        break;
+                    case 'building':
+                        ctx.strokeRect(-7, -9, 14, 18);
+                        ctx.beginPath();
+                        ctx.moveTo(-4, 9);
+                        ctx.lineTo(-4, 5);
+                        ctx.lineTo(4, 5);
+                        ctx.lineTo(4, 9);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(-4, -5, 0.5, 0, Math.PI * 2);
+                        ctx.arc(0, -5, 0.5, 0, Math.PI * 2);
+                        ctx.arc(4, -5, 0.5, 0, Math.PI * 2);
+                        ctx.arc(-4, -1, 0.5, 0, Math.PI * 2);
+                        ctx.arc(0, -1, 0.5, 0, Math.PI * 2);
+                        ctx.arc(4, -1, 0.5, 0, Math.PI * 2);
+                        ctx.arc(-4, 3, 0.5, 0, Math.PI * 2);
+                        ctx.arc(0, 3, 0.5, 0, Math.PI * 2);
+                        ctx.arc(4, 3, 0.5, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'sail':
+                        ctx.beginPath();
+                        ctx.moveTo(0, -10);
+                        ctx.lineTo(0, 10);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(0, -10);
+                        ctx.quadraticCurveTo(8, -6, 6, 0);
+                        ctx.quadraticCurveTo(4, 4, 0, 2);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(-10, 10);
+                        ctx.quadraticCurveTo(-8, 8, -4, 8);
+                        ctx.lineTo(8, 8);
+                        ctx.quadraticCurveTo(10, 8, 10, 10);
+                        ctx.stroke();
+                        break;
+                    case 'shield':
+                        ctx.beginPath();
+                        ctx.moveTo(0, -10);
+                        ctx.lineTo(8, -7);
+                        ctx.lineTo(8, 2);
+                        ctx.quadraticCurveTo(8, 8, 0, 10);
+                        ctx.quadraticCurveTo(-8, 8, -8, 2);
+                        ctx.lineTo(-8, -7);
+                        ctx.closePath();
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(-4, 1);
+                        ctx.lineTo(-1, 4);
+                        ctx.lineTo(5, -2);
+                        ctx.stroke();
+                        break;
+                    case 'shop':
+                        ctx.beginPath();
+                        ctx.moveTo(-9, -4);
+                        ctx.lineTo(-7, -10);
+                        ctx.lineTo(7, -10);
+                        ctx.lineTo(9, -4);
+                        ctx.stroke();
+                        ctx.strokeRect(-9, -4, 18, 14);
+                        ctx.beginPath();
+                        ctx.moveTo(-4, 10);
+                        ctx.lineTo(-4, 4);
+                        ctx.lineTo(4, 4);
+                        ctx.lineTo(4, 10);
+                        ctx.stroke();
+                        break;
+                    case 'bird':
+                        ctx.beginPath();
+                        ctx.moveTo(-8, 6);
+                        ctx.quadraticCurveTo(-4, -4, 6, -6);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(6, -6);
+                        ctx.lineTo(10, -5);
+                        ctx.lineTo(8, -4);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(7, -7, 1, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'island':
+                        ctx.beginPath();
+                        ctx.ellipse(0, 0, 9, 4, 0, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.moveTo(-4, 0);
+                        ctx.lineTo(-2, -5);
+                        ctx.lineTo(0, -2);
+                        ctx.lineTo(2, -6);
+                        ctx.lineTo(4, 0);
+                        ctx.stroke();
+                        break;
+                    default:
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 8, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.beginPath();
+                        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                }
+                
+                ctx.restore();
+            }
+
+            attractions.forEach(attr => {
+                const canvas = document.createElement('canvas');
+                const dpr = window.devicePixelRatio || 2;
+                const w = 160, h = 48;
+                canvas.width = w * dpr;
+                canvas.height = h * dpr;
+                const ctx = canvas.getContext('2d');
+                ctx.scale(dpr, dpr);
+
+                ctx.beginPath();
+                ctx.roundRect(0, 0, w, h, 20);
+                
+                const gradient = ctx.createLinearGradient(0, 0, w, h);
+                gradient.addColorStop(0, 'rgba(224, 247, 250, 0.98)');
+                gradient.addColorStop(1, 'rgba(232, 245, 233, 0.98)');
+                ctx.fillStyle = gradient;
+                ctx.fill();
+                
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                drawMinimalIcon(ctx, attr.icon, 26, 24, 24);
+
+                ctx.fillStyle = '#006064';
+                ctx.font = 'bold 15px "ZCOOL KuaiLe", "Microsoft YaHei", sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(attr.name, 95, 24);
+                
+                const entity = viewer.entities.add({
+                    name: attr.name,
+                    position: Cesium.Cartesian3.fromDegrees(attr.lon, attr.lat, 0),
+                    billboard: {
+                        image: canvas,
+                        scaleByDistance: new Cesium.NearFarScalar(5000, 1.2, 500000, 0.2),
+                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                        verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+                    }
+                });
+
+                entityMap[attr.name] = entity;
+                
+                const sidebarItem = document.createElement('div');
+                sidebarItem.className = 'sidebar-item';
+                sidebarItem.innerHTML = `<div class="icon">${iconLibrary[attr.icon] || iconLibrary.location}</div><div class="info"><div class="name">${attr.name}</div><div class="desc">${attr.desc}</div></div>`;
+                sidebarItem.addEventListener('click', () => {
+                    const sceneMode = viewer.scene.mode;
+                    if (sceneMode === Cesium.SceneMode.SCENE3D) {
+                        viewer.flyTo(entityMap[attr.name], {
+                            offset: new Cesium.HeadingPitchRange(0, -Math.PI / 2.2, 500),
+                            duration: 2,
+                            complete: () => {
+                                setTimeout(() => {
+                                    updateInfobox(attr);
+                                    customInfobox.classList.add('show');
+                                }, 500);
+                            }
+                        });
+                    } else {
+                        viewer.camera.flyTo({
+                            destination: Cesium.Cartesian3.fromDegrees(attr.lon, attr.lat, 8000),
+                            orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+                            duration: 2,
+                            complete: () => {
+                                setTimeout(() => {
+                                    updateInfobox(attr);
+                                    customInfobox.classList.add('show');
+                                }, 500);
+                            }
+                        });
+                    }
+                    document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+                    sidebarItem.classList.add('active');
+                });
+                sidebarList.appendChild(sidebarItem);
+            });
+
+            const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+            handler.setInputAction((movement) => {
+                const pickedObject = viewer.scene.pick(movement.endPosition);
+                if (Cesium.defined(pickedObject) && Cesium.defined(pickedObject.id) && pickedObject.id.name) {
+                    const attr = attractions.find(a => a.name === pickedObject.id.name);
+                    if (attr) {
+                        tooltipName.textContent = attr.name;
+                        tooltipDesc.textContent = attr.desc.substring(0, 60) + '...';
+                        tooltip.style.left = Math.min(movement.endPosition.x + 20, window.innerWidth - tooltip.offsetWidth - 20) + 'px';
+                        tooltip.style.top = Math.max(movement.endPosition.y - tooltip.offsetHeight / 2, 20) + 'px';
+                        tooltip.classList.add('show');
+                    }
+                } else {
+                    tooltip.classList.remove('show');
+                }
+            }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+            handler.setInputAction((click) => {
+                const pickedObject = viewer.scene.pick(click.position);
+                if (Cesium.defined(pickedObject) && Cesium.defined(pickedObject.id) && pickedObject.id.name) {
+                    const attr = attractions.find(a => a.name === pickedObject.id.name);
+                    if (attr) {
+                        updateInfobox(attr);
+                        customInfobox.classList.add('show');
+                        const sceneMode = viewer.scene.mode;
+                        if (sceneMode === Cesium.SceneMode.SCENE3D) {
+                            viewer.flyTo(entityMap[attr.name], {
+                                offset: new Cesium.HeadingPitchRange(0, -Math.PI / 2.2, 500),
+                                duration: 2
+                            });
+                        } else {
+                            viewer.camera.flyTo({
+                                destination: Cesium.Cartesian3.fromDegrees(attr.lon, attr.lat, 8000),
+                                orientation: { heading: 0, pitch: -Math.PI / 2, roll: 0 },
+                                duration: 2
+                            });
+                        }
+                        document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+                        document.querySelectorAll('.sidebar-item').forEach(item => {
+                            if (item.textContent.trim().includes(attr.name)) item.classList.add('active');
+                        });
+                    }
+                }
+            }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+            
+            handler.setInputAction((click) => {
+                const pickedObject = viewer.scene.pick(click.position);
+                if (Cesium.defined(pickedObject) && Cesium.defined(pickedObject.id) && pickedObject.id.name) {
+                    const attr = attractions.find(a => a.name === pickedObject.id.name);
+                    if (attr) {
+                        viewer.camera.flyTo({
+                            destination: Cesium.Cartesian3.fromDegrees(attr.lon, attr.lat, 3000),
+                            orientation: { 
+                                heading: Cesium.Math.toRadians(0), 
+                                pitch: Cesium.Math.toRadians(-45), 
+                                roll: 0 
+                            },
+                            duration: 2
+                        });
+                    }
+                }
+            }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+
+            document.getElementById('infoboxClose').addEventListener('click', () => {
+                customInfobox.classList.remove('show');
+                document.getElementById('routePanel').classList.remove('show');
+                clearRouteLine();
+            });
+
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    const mode = btn.dataset.mode;
+                    if (mode === '3d') viewer.scene.morphTo3D(1.0);
+                    else if (mode === 'columbus') viewer.scene.morphToColumbusView(1.0);
+                    else if (mode === '2d') viewer.scene.morphTo2D(1.0);
+                });
+            });
+
+            const fab = document.getElementById('fab');
+            // chatPanel already declared above, reuse it
+            
+            fab.addEventListener('click', () => {
+                chatPanel.classList.toggle('show');
+                fab.classList.toggle('hidden');
+            });
+            
+            document.getElementById('chatClose').addEventListener('click', () => {
+                chatPanel.classList.remove('show');
+                fab.classList.remove('hidden');
+                stopSpeaking();
+            });
+
+            const chatMessages = document.getElementById('chatMessages');
+            const chatInput = document.getElementById('chatInput');
+            const chatSend = document.getElementById('chatSend');
+
+            function addMessage(role, content) {
+                const row = document.createElement('div');
+                row.className = 'msg-row ' + role;
+                
+                if (role === 'ai') {
+                    const avatar = document.createElement('div');
+                    avatar.className = 'msg-avatar';
+                    avatar.innerHTML = '<img src="images/elf-guide.png" alt="小精灵" />';
+                    row.appendChild(avatar);
+                }
+                
+                const div = document.createElement('div');
+                div.className = 'msg ' + role;
+                
+                if (role === 'ai') {
+                    div.innerHTML = content.replace(/\n/g, '<br>');
+                    const speakBtn = document.createElement('button');
+                    speakBtn.className = 'speak-btn';
+                    speakBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+                    speakBtn.style.cssText = 'margin-left:8px;padding:2px 6px;border:none;border-radius:4px;background:rgba(0,188,212,0.2);color:#006064;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;';
+                    speakBtn.onclick = () => {
+                        if (synth.speaking && currentUtterance) {
+                            stopSpeaking();
+                            speakBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+                        } else {
+                            speakText(content.replace(/<br>/g, '\n'));
+                            speakBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                        }
+                    };
+                    div.appendChild(speakBtn);
+                    
+                    setTimeout(() => {
+                        speakText(content.replace(/<br>/g, '\n'));
+                        speakBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+                    }, 500);
+                } else {
+                    div.innerHTML = content.replace(/\n/g, '<br>');
+                }
+                
+                row.appendChild(div);
+                chatMessages.appendChild(row);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            async function callApi(apiConfig, messages) {
+                try {
+                    const response = await fetch(apiConfig.url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...(apiConfig.apiKey ? { 'Authorization': 'Bearer ' + apiConfig.apiKey } : {})
+                        },
+                        body: JSON.stringify({
+                            model: apiConfig.model,
+                            messages: messages,
+                            temperature: 0.7,
+                            max_tokens: 1000
+                        })
+                    });
+                    const data = await response.json();
+                    if (response.ok && data.choices && data.choices[0]) {
+                        return data.choices[0].message.content;
+                    }
+                } catch (e) {
+                    console.warn('API调用失败:', apiConfig.name, e);
+                }
+                return null;
+            }
+
+            function generateSmartAnswer(text) {
+                const textLower = text.toLowerCase();
+                
+                if (textLower.includes('宁波') && (textLower.includes('好玩') || textLower.includes('景点') || textLower.includes('旅游'))) {
+                    return '宁波有很多值得游玩的景点！\n\n【历史文化景点】：天一阁（中国最早的私家藏书楼）、鼓楼（宁波地标）、庆安会馆（妈祖庙）、河姆渡遗址（7000年文明史）。\n\n【自然风光】：东钱湖（浙江最大淡水湖）、雪窦山（佛教名山，国家5A级景区）、松兰山海滨（沙滩度假区）。\n\n【古镇风情】：慈城古县城（江南保存最完整）、溪口古镇（蒋氏故居）。\n\n【现代休闲】：老外滩（夜景胜地）、月湖（城市绿肺）、象山影视城（影视拍摄基地）。\n\n建议游玩路线：第一天逛天一阁和月湖，晚上看老外滩夜景；第二天去东钱湖；第三天游玩溪口雪窦山。';
+                }
+                
+                if (textLower.includes('美食') || textLower.includes('吃')) {
+                    return '宁波美食以海鲜和特色小吃闻名！\n\n【特色小吃】：\n- 宁波汤圆：黑芝麻猪油馅，软糯香甜，百年老店缸鸭狗最正宗\n- 宁波年糕：洁白如玉，可炒可煮可烤\n- 臭冬瓜：闻着臭吃着香的宁波特色\n\n【海鲜推荐】：\n- 梭子蟹：秋季最肥美\n- 大黄鱼：肉质鲜嫩\n- 红膏炝蟹：咸鲜可口\n- 葱油泥螺：鲜美嫩滑\n\n【名菜】：冰糖甲鱼（宁波十大名菜之首）、雪菜大汤黄鱼、腐皮包黄鱼。';
+                }
+                
+                if (textLower.includes('攻略') || textLower.includes('路线') || textLower.includes('推荐')) {
+                    return '推荐游玩路线：\n\n【三日游攻略】：\n\n第一天：天一阁 → 月湖公园 → 鼓楼步行街 → 老外滩夜景\n第二天：东钱湖一日游（小普陀、陶公岛）\n第三天：溪口古镇 → 雪窦山（千丈岩瀑布、妙高台）\n\n【五日游攻略】：\n前三天同上，第四天：象山影视城 → 松兰山海滨；第五天：慈城古县城 → 河姆渡遗址。\n\n【小贴士】：春秋两季是最佳旅游季节，宁波地铁发达，景点间交通便利。';
+                }
+                
+                if (textLower.includes('历史') || textLower.includes('文化')) {
+                    return '宁波有七千年文明史！\n\n【历史】：河姆渡遗址证明长江流域也是中华文明发源地；宁波古称"明州"，是海上丝绸之路起点之一；"宁波帮"商帮闻名天下。\n\n【文化】：天一阁藏书文化、梁祝爱情传说、妈祖文化（庆安会馆）、佛教文化（雪窦山弥勒道场）。\n\n【非遗】：宁波甬剧、朱金漆木雕、越窑青瓷烧制技艺。';
+                }
+                
+                if (textLower.includes('特产') || textLower.includes('礼品')) {
+                    return '宁波特产推荐：\n\n【美食特产】：\n- 宁波汤圆：可带回家的美味\n- 宁波年糕：真空包装，方便携带\n- 海鲜干货：虾皮、紫菜、鱼干\n\n【水果】：\n- 奉化水蜜桃：皮薄汁多，被誉为"琼浆玉露"\n- 慈溪杨梅：酸甜可口，六月成熟\n- 宁海白枇杷：果肉细腻，甜度高\n\n【工艺品】：越窑青瓷、朱金漆木雕、骨木镶嵌。';
+                }
+                
+                const scores = knowledgeBase.map((k, i) => {
+                    let score = 0;
+                    k.keywords.forEach(kw => {
+                        if (text.includes(kw)) {
+                            score += kw.length * 2;
+                        }
+                        if (text.includes(kw[0]) || text.includes(kw.slice(0, 2))) {
+                            score += 1;
+                        }
+                    });
+                    return { index: i, score };
+                });
+                
+                scores.sort((a, b) => b.score - a.score);
+                
+                const topMatches = scores.filter(s => s.score > 0).slice(0, 3);
+                
+                if (topMatches.length > 0) {
+                    const answers = topMatches.map(s => knowledgeBase[s.index].answer);
+                    return answers.join('\n\n');
+                }
+                
+                return '你好！我是宁波智慧文旅的AI导游。我可以为你介绍宁波的景点、美食、历史文化和旅游攻略！请问你想了解什么？';
+            }
+
+            async function sendChat() {
+                const text = chatInput.value.trim();
+                if (!text) return;
+                chatInput.value = '';
+                
+                addMessage('user', text);
+                const loadingMsg = document.createElement('div');
+                loadingMsg.className = 'msg ai';
+                loadingMsg.innerHTML = '<span class="icon-svg" style="margin-right:4px;"><svg viewBox="0 0 24 24" style="width:16px;height:16px;animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg></span>思考中...';
+                chatMessages.appendChild(loadingMsg);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                try {
+                    const knowledgeText = knowledgeBase.map(k => 
+                        `${k.keywords.join(',')}: ${k.answer}`
+                    ).join('\n');
+
+                    const systemPrompt = `你是宁波智慧文旅的AI导游。请根据以下知识库信息回答用户问题：
+
+知识库：
+${knowledgeText}
+
+回答要求：
+1. 使用中文，语气热情友好
+2. 内容准确，基于知识库信息
+3. 如果知识库中没有相关信息，可以合理推断
+4. 回答详细完整，不要过于简略`;
+
+                    const messages = [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: text }
+                    ];
+
+                    const apiConfigs = [
+                        {
+                            name: 'SiliconFlow',
+                            url: 'https://api.siliconflow.cn/v1/chat/completions',
+                            model: 'Qwen2.5-7B-Instruct'
+                        },
+                        {
+                            name: 'ZhipuAI',
+                            url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+                            model: 'glm-4-flash',
+                            apiKey: '98d2a54a94b6782d61126c519028b255.yT2GdM51K7e4L2QH'
+                        }
+                    ];
+
+                    let answer = null;
+                    for (const apiConfig of apiConfigs) {
+                        answer = await callApi(apiConfig, messages);
+                        if (answer) break;
+                    }
+
+                    chatMessages.removeChild(loadingMsg);
+
+                    if (answer) {
+                        addMessage('ai', answer);
+                    } else {
+                        const localAnswer = generateSmartAnswer(text);
+                        addMessage('ai', localAnswer);
+                    }
+                } catch (error) {
+                    chatMessages.removeChild(loadingMsg);
+                    console.error('AI错误:', error);
+                    
+                    const localAnswer = generateSmartAnswer(text);
+                    addMessage('ai', localAnswer);
+                }
+            }
+
+            chatSend.addEventListener('click', sendChat);
+            chatInput.addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+            function weatherCodeToText(code) {
+                if (code === 0) return '晴';
+                if (code <= 3) return '多云';
+                if (code <= 48) return '雾';
+                if (code <= 55) return '小雨';
+                if (code <= 65) return '雨';
+                if (code <= 77) return '雪';
+                if (code <= 82) return '阵雨';
+                return '雷雨';
+            }
+
+            const weatherIconSvgs = {
+                0: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>',
+                1: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="4"/><path d="M12 2v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="M2 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="M17 18H7a5 5 0 1 1 10 0Z"/></svg>',
+                2: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="10" r="3"/><path d="M17 18H7a5 5 0 1 1 10 0Z"/></svg>',
+                3: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18H7a5 5 0 1 1 10 0Z"/></svg>',
+                rain: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14H7a5 5 0 1 1 10 0Z"/><path d="M8 18v2"/><path d="M12 18v2"/><path d="M16 18v2"/></svg>',
+                snow: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="m4.93 4.93 14.14 14.14"/><path d="m19.07 4.93-14.14 14.14"/></svg>',
+                fog: '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h18"/><path d="M3 12h18"/><path d="M3 16h18"/></svg>'
+            };
+
+            const miniIconSvgs = {
+                0: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>',
+                1: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="3"/><path d="M17 16H7a4 4 0 1 0 10 0Z"/></svg>',
+                2: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 14H7a4 4 0 1 0 10 0Z"/></svg>',
+                3: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 14H7a4 4 0 1 0 10 0Z"/></svg>',
+                rain: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 14H7a4 4 0 1 0 10 0Z"/><path d="M8 18v2M12 18v2M16 18v2"/></svg>',
+                snow: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07"/></svg>',
+                fog: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h18M3 12h18M3 16h18"/></svg>'
+            };
+
+            function getMiniIcon(code) {
+                if (code === 0) return miniIconSvgs[0];
+                if (code <= 3) return miniIconSvgs[Math.min(code, 3)];
+                if (code <= 48) return miniIconSvgs.fog;
+                if (code <= 65) return miniIconSvgs.rain;
+                if (code <= 77) return miniIconSvgs.snow;
+                return miniIconSvgs.rain;
+            }
+
+            const adcodeCityMap = {
+                '330203': '海曙区', '330205': '江北区', '330211': '镇海区', '330212': '鄞州区',
+                '330213': '奉化区', '330225': '象山县', '330281': '余姚市', '330226': '宁海县', '330282': '慈溪市'
+            };
+            const adcodeMap = {
+                '天一阁': '330203', '月湖': '330203', '鼓楼': '330203', '南塘老街': '330203', '天一广场': '330203',
+                '老外滩': '330205', '保国寺': '330205', '慈城古县城': '330205',
+                '招宝山': '330211', '九龙湖': '330211',
+                '东钱湖': '330212', '小普陀': '330212', '陶公岛': '330212', '宁波博物馆': '330212', '庆安会馆': '330212', '梁祝文化公园': '330212', '阿育王寺': '330212',
+                '雪窦山': '330213', '溪口古镇': '330213',
+                '象山影视城': '330225', '松兰山海滨': '330225', '渔山列岛': '330225',
+                '河姆渡遗址': '330281',
+                '前童古镇': '330226', '五龙潭': '330226',
+                '杭州湾湿地公园': '330282', '达蓬山': '330282'
+            };
+
+            function wmoToWeatherInfo(code) {
+                if (code === 0) return { text: '晴', icon: 0 };
+                if (code <= 3) return { text: '多云', icon: 1 };
+                if (code <= 48) return { text: '雾', icon: 45 };
+                if (code <= 55) return { text: '小雨', icon: 51 };
+                if (code <= 57) return { text: '中雨', icon: 61 };
+                if (code <= 65) return { text: '大雨', icon: 63 };
+                if (code <= 67) return { text: '暴雨', icon: 65 };
+                if (code <= 75) return { text: '小雪', icon: 71 };
+                if (code <= 77) return { text: '中雪', icon: 73 };
+                if (code <= 82) return { text: '阵雨', icon: 80 };
+                if (code <= 86) return { text: '大雪', icon: 75 };
+                if (code <= 99) return { text: '雷阵雨', icon: 95 };
+                return { text: '多云', icon: 1 };
+            }
+
+            let currentWeatherLat = 29.87;
+            let currentWeatherLon = 121.53;
+            let currentDistrictName = '宁波';
+            let weatherRefreshTimer = null;
+
+            async function fetchWeather(attrName) {
+                let lat = currentWeatherLat, lon = currentWeatherLon, district = currentDistrictName;
+                if (attrName) {
+                    const attr = attractions.find(a => a.name === attrName);
+                    if (attr) {
+                        lat = attr.lat; lon = attr.lon;
+                        currentWeatherLat = lat; currentWeatherLon = lon;
+                        const adcode = adcodeMap[attrName];
+                        district = adcode ? adcodeCityMap[adcode] : attrName;
+                        currentDistrictName = district;
+                    }
+                }
+                try {
+                    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Asia/Shanghai&forecast_days=4`;
+                    const response = await fetch(url);
+                    const data = await response.json();
+                    if (data.current) {
+                        const temp = Math.round(data.current.temperature_2m);
+                        const wInfo = wmoToWeatherInfo(data.current.weather_code);
+                        document.getElementById('weatherTemp').textContent = temp + '°C';
+                        document.getElementById('weatherDesc').textContent = district + ' · ' + wInfo.text;
+                        document.getElementById('weatherIcon').innerHTML = weatherIconSvgs[wInfo.icon] || weatherIconSvgs[1];
+                    }
+                    if (data.daily) {
+                        const days = ['明天', '后天', '大后天'];
+                        for (let i = 0; i < 3; i++) {
+                            const fcEl = document.getElementById('fc' + (i + 1));
+                            const ftEl = document.getElementById('ft' + (i + 1));
+                            if (fcEl && ftEl && data.daily.weather_code[i + 1] !== undefined) {
+                                const wInfo = wmoToWeatherInfo(data.daily.weather_code[i + 1]);
+                                fcEl.innerHTML = getMiniIcon(wInfo.icon);
+                                ftEl.textContent = Math.round(data.daily.temperature_2m_min[i + 1]) + '~' + Math.round(data.daily.temperature_2m_max[i + 1]) + '°';
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('天气获取失败:', e);
+                    document.getElementById('weatherDesc').textContent = currentDistrictName + ' · 获取失败';
+                }
+            }
+            fetchWeather();
+            if (weatherRefreshTimer) clearInterval(weatherRefreshTimer);
+            weatherRefreshTimer = setInterval(() => fetchWeather(), 600000);
+
+            function updateWeatherForAttraction(attrName) {
+                fetchWeather(attrName);
+            }
+
+            // 天气场景切换
+            let currentWeatherScene = 'clear';
+            let weatherEffectEl = null;
+
+            function clearWeatherEffect() {
+                if (weatherEffectEl) {
+                    weatherEffectEl.remove();
+                    weatherEffectEl = null;
+                }
+                document.body.style.filter = '';
+            }
+
+            function applyWeatherScene(scene) {
+                clearWeatherEffect();
+                currentWeatherScene = scene;
+                document.querySelectorAll('.scene-btn').forEach(b => b.classList.remove('active'));
+                document.querySelector(`.scene-btn[data-scene="${scene}"]`).classList.add('active');
+
+                if (scene === 'clear') {
+                    viewer.scene.skyAtmosphere.show = true;
+                    return;
+                }
+
+                if (scene === 'rain') {
+                    document.body.style.filter = 'saturate(0.7) brightness(0.85)';
+                    const el = document.createElement('div');
+                    el.className = 'weather-rain';
+                    el.id = 'weatherEffectCanvas';
+                    document.body.appendChild(el);
+                    weatherEffectEl = el;
+                    const cvs = document.createElement('canvas');
+                    cvs.style.cssText = 'width:100%;height:100%;';
+                    el.appendChild(cvs);
+                    const rctx = cvs.getContext('2d');
+                    let rainDrops = [];
+                    function resizeRain() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; rainDrops = []; for (let i = 0; i < 200; i++) rainDrops.push({ x: Math.random() * cvs.width, y: Math.random() * cvs.height, l: 10 + Math.random() * 15, v: 8 + Math.random() * 6 }); }
+                    resizeRain();
+                    window.addEventListener('resize', resizeRain);
+                    let rainRunning = true;
+                    function drawRain() {
+                        if (!rainRunning) return;
+                        rctx.clearRect(0, 0, cvs.width, cvs.height);
+                        rctx.strokeStyle = 'rgba(174, 213, 224, 0.5)';
+                        rctx.lineWidth = 1.5;
+                        rainDrops.forEach(d => {
+                            rctx.beginPath();
+                            rctx.moveTo(d.x, d.y);
+                            rctx.lineTo(d.x - 2, d.y + d.l);
+                            rctx.stroke();
+                            d.y += d.v;
+                            d.x -= 1;
+                            if (d.y > cvs.height) { d.y = -d.l; d.x = Math.random() * cvs.width; }
+                        });
+                        requestAnimationFrame(drawRain);
+                    }
+                    drawRain();
+                    el._stop = () => { rainRunning = false; window.removeEventListener('resize', resizeRain); };
+                }
+
+                if (scene === 'snow') {
+                    document.body.style.filter = 'saturate(0.6) brightness(0.9)';
+                    const el = document.createElement('div');
+                    el.className = 'weather-snow';
+                    el.id = 'weatherEffectCanvas';
+                    document.body.appendChild(el);
+                    weatherEffectEl = el;
+                    const cvs = document.createElement('canvas');
+                    cvs.style.cssText = 'width:100%;height:100%;';
+                    el.appendChild(cvs);
+                    const sctx = cvs.getContext('2d');
+                    let flakes = [];
+                    function resizeSnow() { cvs.width = window.innerWidth; cvs.height = window.innerHeight; flakes = []; for (let i = 0; i < 120; i++) flakes.push({ x: Math.random() * cvs.width, y: Math.random() * cvs.height, r: 2 + Math.random() * 3, v: 1 + Math.random() * 2, w: Math.random() * Math.PI * 2 }); }
+                    resizeSnow();
+                    window.addEventListener('resize', resizeSnow);
+                    let snowRunning = true;
+                    function drawSnow() {
+                        if (!snowRunning) return;
+                        sctx.clearRect(0, 0, cvs.width, cvs.height);
+                        sctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                        flakes.forEach(f => {
+                            sctx.beginPath();
+                            sctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+                            sctx.fill();
+                            f.y += f.v;
+                            f.w += 0.02;
+                            f.x += Math.sin(f.w) * 0.8;
+                            if (f.y > cvs.height) { f.y = -f.r; f.x = Math.random() * cvs.width; }
+                        });
+                        requestAnimationFrame(drawSnow);
+                    }
+                    drawSnow();
+                    el._stop = () => { snowRunning = false; window.removeEventListener('resize', resizeSnow); };
+                }
+
+                if (scene === 'fog') {
+                    document.body.style.filter = 'saturate(0.5) brightness(0.8) blur(0.5px)';
+                    const el = document.createElement('div');
+                    el.className = 'weather-fog';
+                    el.id = 'weatherEffectCanvas';
+                    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999;background:rgba(200,220,220,0.35);transition:opacity 1s;';
+                    document.body.appendChild(el);
+                    weatherEffectEl = el;
+                    let fogOpacity = 0.35;
+                    let fogDir = 1;
+                    let fogRunning = true;
+                    function animateFog() {
+                        if (!fogRunning) return;
+                        fogOpacity += fogDir * 0.002;
+                        if (fogOpacity > 0.5) fogDir = -1;
+                        if (fogOpacity < 0.25) fogDir = 1;
+                        el.style.background = `rgba(200,220,220,${fogOpacity})`;
+                        requestAnimationFrame(animateFog);
+                    }
+                    animateFog();
+                    el._stop = () => { fogRunning = false; };
+                }
+            }
+
+            document.querySelectorAll('.scene-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const scene = btn.dataset.scene;
+                    if (weatherEffectEl && weatherEffectEl._stop) weatherEffectEl._stop();
+                    applyWeatherScene(scene);
+                });
+            });
+
+            const recommendedRoutes = [
+                { name: '经典一日游', steps: [
+                    { name: '天一阁', dist: '起点' },
+                    { name: '月湖', dist: '步行约15分钟' },
+                    { name: '鼓楼', dist: '步行约10分钟' },
+                    { name: '老外滩', dist: '步行约20分钟' }
+                ]},
+                { name: '自然风光游', steps: [
+                    { name: '东钱湖', dist: '起点' },
+                    { name: '小普陀', dist: '乘船约10分钟' },
+                    { name: '陶公岛', dist: '乘船约15分钟' }
+                ]},
+                { name: '文化探秘游', steps: [
+                    { name: '河姆渡遗址', dist: '起点' },
+                    { name: '保国寺', dist: '驾车约30分钟' },
+                    { name: '慈城古县城', dist: '驾车约20分钟' }
+                ]},
+                { name: '海滨度假游', steps: [
+                    { name: '松兰山海滨', dist: '起点' },
+                    { name: '象山影视城', dist: '驾车约20分钟' },
+                    { name: '渔山列岛', dist: '乘船约2小时' }
+                ]},
+                { name: '名山古镇游', steps: [
+                    { name: '溪口古镇', dist: '起点' },
+                    { name: '雪窦山', dist: '驾车约15分钟' },
+                    { name: '梁祝文化公园', dist: '驾车约40分钟' },
+                    { name: '庆安会馆', dist: '驾车约30分钟' }
+                ]}
+            ];
+
+            let currentRouteIndex = 0;
+
+            function calculateDrivingTime(startName, endName) {
+                const start = attractions.find(a => a.name === startName);
+                const end = attractions.find(a => a.name === endName);
+                
+                if (!start || !end) {
+                    return '驾车约30分钟';
+                }
+                
+                const R = 6371;
+                const dLat = (end.lat - start.lat) * Math.PI / 180;
+                const dLon = (end.lon - start.lon) * Math.PI / 180;
+                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                          Math.cos(start.lat * Math.PI / 180) * Math.cos(end.lat * Math.PI / 180) *
+                          Math.sin(dLon/2) * Math.sin(dLon/2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                const distance = R * c;
+                
+                if (distance < 2) {
+                    const walkingMinutes = Math.round(distance * 6);
+                    return '步行约' + walkingMinutes + '分钟';
+                }
+                
+                const avgSpeed = 45;
+                const hours = distance / avgSpeed;
+                
+                if (hours < 1) {
+                    return '驾车约' + Math.round(hours * 60) + '分钟';
+                } else if (hours < 2) {
+                    const mins = Math.round((hours - Math.floor(hours)) * 60);
+                    return '驾车约' + Math.floor(hours) + '小时' + (mins > 0 ? mins + '分钟' : '');
+                } else {
+                    const mins = Math.round((hours - Math.floor(hours)) * 60);
+                    return '驾车约' + Math.floor(hours) + '小时' + (mins > 0 ? mins + '分钟' : '');
+                }
+            }
+
+            let routePolyline = null;
+
+            function showRoute(attractionName = '') {
+                const routePanel = document.getElementById('routePanel');
+                const routeSteps = document.getElementById('routeSteps');
+                
+                let route = recommendedRoutes[currentRouteIndex];
+                let displaySteps = [];
+                
+                if (attractionName && attractionName !== '') {
+                    const matchingRoute = recommendedRoutes.find(r => 
+                        r.steps.some(step => step.name === attractionName)
+                    );
+                    if (matchingRoute) {
+                        route = matchingRoute;
+                        currentRouteIndex = recommendedRoutes.indexOf(route);
+                    }
+                    
+                    const currentIndex = route.steps.findIndex(step => step.name === attractionName);
+                    if (currentIndex >= 0) {
+                        displaySteps = route.steps.slice(currentIndex);
+                        displaySteps[0] = { ...displaySteps[0], dist: '当前位置' };
+                    } else {
+                        displaySteps = [{ name: attractionName, dist: '当前位置' }];
+                    }
+                    
+                    const maxSteps = 4;
+                    if (displaySteps.length < maxSteps) {
+                        const usedNames = new Set(displaySteps.map(s => s.name));
+                        
+                        function findNearestAttraction(fromName) {
+                            const fromAttr = attractions.find(a => a.name === fromName);
+                            if (!fromAttr) return null;
+                            
+                            let nearest = null;
+                            let minDistance = Infinity;
+                            
+                            for (const attr of attractions) {
+                                if (usedNames.has(attr.name)) continue;
+                                
+                                const R = 6371;
+                                const dLat = (attr.lat - fromAttr.lat) * Math.PI / 180;
+                                const dLon = (attr.lon - fromAttr.lon) * Math.PI / 180;
+                                const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                                          Math.cos(fromAttr.lat * Math.PI / 180) * Math.cos(attr.lat * Math.PI / 180) *
+                                          Math.sin(dLon/2) * Math.sin(dLon/2);
+                                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                                const distance = R * c;
+                                
+                                if (distance < minDistance) {
+                                    minDistance = distance;
+                                    nearest = attr;
+                                }
+                            }
+                            
+                            return nearest ? nearest.name : null;
+                        }
+                        
+                        while (displaySteps.length < maxSteps) {
+                            const lastStepName = displaySteps[displaySteps.length - 1].name;
+                            const nearestName = findNearestAttraction(lastStepName);
+                            
+                            if (!nearestName) break;
+                            
+                            displaySteps.push({
+                                name: nearestName,
+                                dist: calculateDrivingTime(lastStepName, nearestName)
+                            });
+                            usedNames.add(nearestName);
+                        }
+                    }
+                } else {
+                    displaySteps = [...route.steps];
+                }
+                
+                routePanel.querySelector('h4').innerHTML = '<span class="icon-svg"><svg viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></svg></span> ' + route.name;
+                routeSteps.innerHTML = displaySteps.map((step, i) => `
+                    <li class="route-step" style="cursor: pointer;" onclick="showAttractionInfo('${step.name}')">
+                        <div class="step-num">${i + 1}</div>
+                        <div class="step-info">
+                            <div class="step-name">${step.name}</div>
+                            <div class="step-dist">${step.dist}</div>
+                        </div>
+                    </li>
+                `).join('');
+                
+                const infoboxRect = document.getElementById('customInfobox').getBoundingClientRect();
+                routePanel.style.top = infoboxRect.top + 'px';
+                routePanel.style.left = (infoboxRect.left - 335) + 'px';
+                
+                routePanel.classList.add('show');
+                routePanel.classList.remove('collapsed');
+                document.getElementById('routeClose').textContent = '▶';
+                
+                drawRouteLine(displaySteps);
+
+                const routeAttrs = displaySteps.map(s => attractions.find(a => a.name === s.name)).filter(Boolean);
+                if (routeAttrs.length >= 2) {
+                    const positions = routeAttrs.map(a => Cesium.Cartesian3.fromDegrees(a.lon, a.lat, 0));
+                    const boundingSphere = Cesium.BoundingSphere.fromPoints(positions);
+                    viewer.camera.flyToBoundingSphere(boundingSphere, {
+                        offset: new Cesium.HeadingPitchRange(0, -Math.PI / 2.2, 0),
+                        duration: 1.5,
+                        complete: () => {
+                            setTimeout(() => {
+                                viewer.scene.requestRender();
+                            }, 300);
+                        }
+                    });
+                }
+            }
+
+            let routeEntities = [];
+
+            function clearRouteLine() {
+                routeEntities.forEach(e => viewer.entities.remove(e));
+                routeEntities = [];
+                if (routePolyline) {
+                    viewer.entities.remove(routePolyline);
+                    routePolyline = null;
+                }
+                // 恢复所有景点标记显示
+                Object.values(entityMap).forEach(e => { e.show = true; });
+            }
+
+            function drawRouteLine(steps) {
+                clearRouteLine();
+                
+                if (steps.length < 2) return;
+
+                const routeNames = new Set(steps.map(s => s.name));
+                Object.entries(entityMap).forEach(([name, e]) => {
+                    e.show = routeNames.has(name);
+                });
+                
+                const positions = [];
+                const stepAttrs = [];
+                for (const step of steps) {
+                    const attr = attractions.find(a => a.name === step.name);
+                    if (attr) {
+                        positions.push(Cesium.Cartesian3.fromDegrees(attr.lon, attr.lat, 1));
+                        stepAttrs.push(attr);
+                    }
+                }
+                
+                if (positions.length >= 2) {
+                    routePolyline = viewer.entities.add({
+                        polyline: {
+                            positions: positions,
+                            width: 12,
+                            material: new Cesium.PolylineGlowMaterialProperty({
+                                glowPower: 0.4,
+                                color: Cesium.Color.fromCssColorString('#00bcd4')
+                            }),
+                            clampToGround: true
+                        }
+                    });
+
+                    for (let i = 0; i < stepAttrs.length - 1; i++) {
+                        const from = stepAttrs[i];
+                        const to = stepAttrs[i + 1];
+                        
+                        const midLon = (from.lon + to.lon) / 2;
+                        const midLat = (from.lat + to.lat) / 2;
+                        const arrowCanvas = document.createElement('canvas');
+                        arrowCanvas.width = 28;
+                        arrowCanvas.height = 28;
+                        const actx = arrowCanvas.getContext('2d');
+                        actx.beginPath();
+                        actx.arc(14, 14, 12, 0, Math.PI * 2);
+                        actx.fillStyle = 'rgba(0, 188, 212, 0.95)';
+                        actx.fill();
+                        actx.strokeStyle = '#fff';
+                        actx.lineWidth = 2;
+                        actx.stroke();
+                        actx.beginPath();
+                        actx.moveTo(9, 14);
+                        actx.lineTo(19, 14);
+                        actx.lineTo(15, 10);
+                        actx.moveTo(19, 14);
+                        actx.lineTo(15, 18);
+                        actx.strokeStyle = '#fff';
+                        actx.lineWidth = 2.5;
+                        actx.lineCap = 'round';
+                        actx.lineJoin = 'round';
+                        actx.stroke();
+
+                        const arrowEntity = viewer.entities.add({
+                            position: Cesium.Cartesian3.fromDegrees(midLon, midLat, 10),
+                            billboard: {
+                                image: arrowCanvas,
+                                scaleByDistance: new Cesium.NearFarScalar(5000, 1, 150000, 0.4),
+                                verticalOrigin: Cesium.VerticalOrigin.CENTER
+                            }
+                        });
+                        routeEntities.push(arrowEntity);
+                    }
+
+                    stepAttrs.forEach((attr, i) => {
+                        const numCanvas = document.createElement('canvas');
+                        numCanvas.width = 40;
+                        numCanvas.height = 40;
+                        const nctx = numCanvas.getContext('2d');
+                        
+                        nctx.beginPath();
+                        nctx.arc(20, 20, 17, 0, Math.PI * 2);
+                        nctx.fillStyle = i === 0 ? '#00bcd4' : '#66bb6a';
+                        nctx.fill();
+                        nctx.strokeStyle = '#fff';
+                        nctx.lineWidth = 3;
+                        nctx.stroke();
+                        
+                        nctx.fillStyle = '#fff';
+                        nctx.font = 'bold 16px "Microsoft YaHei", sans-serif';
+                        nctx.textAlign = 'center';
+                        nctx.textBaseline = 'middle';
+                        nctx.fillText(String(i + 1), 20, 20);
+
+                        const numEntity = viewer.entities.add({
+                            position: Cesium.Cartesian3.fromDegrees(attr.lon, attr.lat, 10),
+                            billboard: {
+                                image: numCanvas,
+                                scaleByDistance: new Cesium.NearFarScalar(5000, 1, 150000, 0.4),
+                                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                                horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+                                pixelOffset: new Cesium.Cartesian2(0, -50)
+                            }
+                        });
+                        routeEntities.push(numEntity);
+                    });
+                }
+            }
+
+            document.getElementById('actionRoute').addEventListener('click', () => {
+                const sidebar = document.getElementById('sidebar');
+                if (!sidebar.classList.contains('collapsed')) {
+                    sidebar.classList.add('collapsed');
+                    document.getElementById('sidebarCollapseBtn').textContent = '▶';
+                }
+                showRoute(infoboxTitle.textContent);
+            });
+
+            let synth = window.speechSynthesis;
+            let currentUtterance = null;
+
+            function speakText(text) {
+                if (synth.speaking) {
+                    synth.cancel();
+                }
+                
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-CN';
+                utterance.rate = 1;
+                utterance.pitch = 1;
+                
+                utterance.onend = () => {
+                    currentUtterance = null;
+                };
+                
+                utterance.onerror = (e) => {
+                    console.error('语音合成错误:', e);
+                    currentUtterance = null;
+                };
+                
+                currentUtterance = utterance;
+                synth.speak(utterance);
+            }
+
+            function stopSpeaking() {
+                if (synth.speaking) {
+                    synth.cancel();
+                }
+            }
+
+            document.getElementById('actionGuide').addEventListener('click', () => {
+                customInfobox.classList.remove('show');
+                chatPanel.classList.add('show');
+                fab.classList.add('hidden');
+                chatInput.value = `请为我介绍一下${infoboxTitle.textContent}`;
+                chatInput.focus();
+                sendChat();
+            });
+
+            // ===== 全景浏览功能 =====
+            let panoramaViewer = null;
+
+            function imgUrlToDataURL(url) {
+                return new Promise((resolve, reject) => {
+                    const img = new Image();
+                    const timer = setTimeout(() => { img.src = ''; reject(new Error('timeout')); }, 8000);
+                    img.onload = () => {
+                        clearTimeout(timer);
+                        try {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = img.naturalWidth;
+                            canvas.height = img.naturalHeight;
+                            canvas.getContext('2d').drawImage(img, 0, 0);
+                            resolve(canvas.toDataURL('image/png'));
+                        } catch (e) {
+                            reject(e);
+                        }
+                    };
+                    img.onerror = () => { clearTimeout(timer); reject(new Error('Image load failed')); };
+                    img.src = url;
+                });
+            }
+
+            function openPanorama(attr) {
+                const overlay = document.getElementById('panoramaOverlay');
+                const title = document.getElementById('panoramaTitle');
+                const loading = document.getElementById('panoramaLoading');
+                const hint = document.getElementById('panoramaHint');
+
+                title.textContent = attr.name + ' · 全景浏览';
+                overlay.classList.add('show');
+                loading.style.display = 'flex';
+                loading.querySelector('.spinner').style.display = 'block';
+                loading.querySelector('.loading-text').textContent = '正在加载全景图像...';
+                hint.style.opacity = '1';
+                setTimeout(() => overlay.classList.add('visible'), 10);
+
+                document.getElementById('cesiumContainer').style.visibility = 'hidden';
+
+                const failTimer = setTimeout(() => {
+                    loading.querySelector('.loading-text').textContent = '加载超时，3秒后自动关闭...';
+                    loading.querySelector('.spinner').style.display = 'none';
+                    setTimeout(closePanorama, 3000);
+                }, 12000);
+
+                const imgUrl = attr.panoramaImage;
+
+                const testImg = new Image();
+                testImg.onload = () => {
+                    clearTimeout(failTimer);
+                    loading.style.display = 'none';
+                    initSimplePanorama(imgUrl);
+                    setTimeout(() => { hint.style.opacity = '0'; }, 4000);
+                };
+                testImg.onerror = () => {
+                    clearTimeout(failTimer);
+                    loading.querySelector('.loading-text').textContent = '全景图加载失败，3秒后自动关闭...';
+                    loading.querySelector('.spinner').style.display = 'none';
+                    setTimeout(closePanorama, 3000);
+                };
+                testImg.src = imgUrl;
+            }
+
+            function initSimplePanorama(imgUrl) {
+                const viewerDiv = document.getElementById('panoramaViewer');
+                viewerDiv.innerHTML = '';
+
+                const container = document.createElement('div');
+                container.style.cssText = 'width:100%;height:100%;overflow:hidden;cursor:grab;position:relative;';
+
+                const img = document.createElement('img');
+                img.src = imgUrl;
+                img.style.cssText = 'position:absolute;max-width:none;user-select:none;-webkit-user-drag:none;';
+                img.draggable = false;
+
+                container.appendChild(img);
+                viewerDiv.appendChild(container);
+
+                let offsetX = 0, offsetY = 0, isDragging = false, startX, startY, startOffX, startOffY;
+                let zoom = 1;
+
+                function updateTransform() {
+                    const cw = container.clientWidth;
+                    const ch = container.clientHeight;
+                    const iw = img.naturalWidth * zoom;
+                    const ih = img.naturalHeight * zoom;
+
+                    img.style.width = iw + 'px';
+                    img.style.height = ih + 'px';
+
+                    if (iw > cw) {
+                        offsetX = Math.max(cw - iw, Math.min(0, offsetX));
+                    } else {
+                        offsetX = (cw - iw) / 2;
+                    }
+                    if (ih > ch) {
+                        offsetY = Math.max(ch - ih, Math.min(0, offsetY));
+                    } else {
+                        offsetY = (ch - ih) / 2;
+                    }
+
+                    img.style.left = offsetX + 'px';
+                    img.style.top = offsetY + 'px';
+                }
+
+                img.onload = () => {
+                    zoom = Math.max(container.clientWidth / img.naturalWidth, container.clientHeight / img.naturalHeight) * 1.2;
+                    offsetX = (container.clientWidth - img.naturalWidth * zoom) / 2;
+                    offsetY = (container.clientHeight - img.naturalHeight * zoom) / 2;
+                    updateTransform();
+                };
+
+                container.addEventListener('mousedown', (e) => {
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    startOffX = offsetX;
+                    startOffY = offsetY;
+                    container.style.cursor = 'grabbing';
+                    e.preventDefault();
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    offsetX = startOffX + (e.clientX - startX);
+                    offsetY = startOffY + (e.clientY - startY);
+                    updateTransform();
+                });
+
+                document.addEventListener('mouseup', () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        container.style.cursor = 'grab';
+                    }
+                });
+
+                container.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const rect = container.getBoundingClientRect();
+                    const mx = e.clientX - rect.left;
+                    const my = e.clientY - rect.top;
+
+                    const oldZoom = zoom;
+                    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                    zoom = Math.max(0.3, Math.min(5, zoom * delta));
+
+                    offsetX = mx - (mx - offsetX) * (zoom / oldZoom);
+                    offsetY = my - (my - offsetY) * (zoom / oldZoom);
+                    updateTransform();
+                }, { passive: false });
+
+                let autoScrollSpeed = 0.3;
+                let autoScrollRAF = null;
+                function autoScroll() {
+                    if (!isDragging && viewerDiv.querySelector('img')) {
+                        const iw = img.naturalWidth * zoom;
+                        const cw = container.clientWidth;
+                        if (iw > cw) {
+                            offsetX -= autoScrollSpeed;
+                            if (offsetX < cw - iw) offsetX = 0;
+                            updateTransform();
+                        }
+                    }
+                    autoScrollRAF = requestAnimationFrame(autoScroll);
+                }
+                autoScrollRAF = requestAnimationFrame(autoScroll);
+
+                container._cleanup = () => {
+                    if (autoScrollRAF) cancelAnimationFrame(autoScrollRAF);
+                };
+            }
+
+            function closePanorama() {
+                const overlay = document.getElementById('panoramaOverlay');
+                const viewerDiv = document.getElementById('panoramaViewer');
+                const container = viewerDiv.querySelector('div');
+                if (container && container._cleanup) container._cleanup();
+                overlay.classList.remove('visible');
+                setTimeout(() => {
+                    overlay.classList.remove('show');
+                    if (panoramaViewer) {
+                        panoramaViewer.destroy();
+                        panoramaViewer = null;
+                    }
+                    viewerDiv.innerHTML = '';
+                    document.getElementById('cesiumContainer').style.visibility = 'visible';
+                }, 400);
+            }
+
+            document.getElementById('actionPanorama').addEventListener('click', () => {
+                const attrName = infoboxTitle.textContent;
+                const attr = attractions.find(a => a.name === attrName);
+                if (attr && attr.panoramaImage) {
+                    customInfobox.classList.remove('show');
+                    openPanorama(attr);
+                }
+            });
+
+            document.getElementById('panoramaClose').addEventListener('click', closePanorama);
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && document.getElementById('panoramaOverlay').classList.contains('show')) {
+                    closePanorama();
+                }
+            });
+
+            document.getElementById('routeClose').addEventListener('click', () => {
+                document.getElementById('routePanel').classList.remove('show');
+                clearRouteLine();
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar.classList.contains('collapsed')) {
+                    sidebar.classList.remove('collapsed');
+                    document.getElementById('sidebarCollapseBtn').textContent = '◀';
+                }
+                currentRouteIndex = (currentRouteIndex + 1) % recommendedRoutes.length;
+            });
+
+            function makeDraggable(element) {
+                let isDragging = false;
+                let startX, startY, initialLeft, initialTop;
+
+                element.addEventListener('mousedown', (e) => {
+                    if (e.target.closest('.close-btn') || e.target.closest('.chat-input-area') || e.target.tagName === 'INPUT') {
+                        return;
+                    }
+                    isDragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    initialLeft = element.offsetLeft;
+                    initialTop = element.offsetTop;
+                    element.classList.add('dragging');
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    const newLeft = Math.max(0, Math.min(window.innerWidth - element.offsetWidth, initialLeft + dx));
+                    const newTop = Math.max(0, Math.min(window.innerHeight - element.offsetHeight, initialTop + dy));
+                    element.style.left = newLeft + 'px';
+                    element.style.top = newTop + 'px';
+                    element.style.right = 'auto';
+                    element.style.bottom = 'auto';
+                });
+
+                document.addEventListener('mouseup', () => {
+                    isDragging = false;
+                    element.classList.remove('dragging');
+                });
+            }
+
+            const infobox = document.getElementById('customInfobox');
+            const chatPanel = document.getElementById('chatPanel');
+            const sidebar = document.getElementById('sidebar');
+            const routePanel = document.getElementById('routePanel');
+            makeDraggable(infobox);
+            makeDraggable(chatPanel);
+            makeDraggable(sidebar);
+            makeDraggable(routePanel);
+
+            document.getElementById('sidebarCollapseBtn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                sidebar.classList.toggle('collapsed');
+                const btn = document.getElementById('sidebarCollapseBtn');
+                btn.textContent = sidebar.classList.contains('collapsed') ? '▶' : '◀';
+            });
+
+            sidebar.addEventListener('click', (e) => {
+                if (sidebar.classList.contains('collapsed')) {
+                    sidebar.classList.remove('collapsed');
+                    const btn = document.getElementById('sidebarCollapseBtn');
+                    btn.textContent = '◀';
+                }
+            });
+
+            setTimeout(() => {
+                document.getElementById('loadingOverlay').style.display = 'none';
+            }, 3000);
+        }
+
+        initApp();
+    </script>
+</body>
+</html>
